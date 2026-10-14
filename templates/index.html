@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Velnik MIS | Sales Analysis</title>
+  <link rel="stylesheet" href="/static/styles.css">
+  <script id="report-data" type="application/json">__REPORT_DATA__</script>
+  <script src="/static/app.js" defer></script>
+  <script src="/static/ai-chat.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="#top"><span class="brand-mark">V</span><span>VELNIK MIS</span></a>
+    <nav aria-label="Main navigation">
+      <a href="#snapshot">Snapshot</a>
+      <a href="#period-comparison">Period comparison</a>
+      <a href="#year-comparison">Year-over-year</a>
+      <a href="#state-billing">State billing</a>
+      <a href="#weekly">Weekly</a>
+      <a href="#nepal">Nepal</a>
+      <a href="#improve">Analysis</a>
+      <a href="#ai-analysis">Local analysis</a>
+      <a href="#products">Products</a>
+      <a href="#distributors">Distributors</a>
+      <a href="/stock">Stock report</a>
+      <a href="#recurring">Refresh</a>
+    </nav>
+    <div class="source-chip"><span class="live-dot" aria-hidden="true"></span><span id="sourceName">Workbook loaded</span></div>
+  </header>
+
+  <main class="page" id="top">
+    <section class="hero">
+      <div>
+        <p class="kicker">SALES PERFORMANCE · MIS</p>
+        <h1>Sales overview</h1>
+        <p class="hero-copy">Daily movement, plan gaps, product mix, and distributors to follow up.</p>
+      </div>
+      <div class="as-of"><span>REPORT PERIOD</span><strong id="periodLabel">—</strong></div>
+    </section>
+
+    <section class="section" id="ai-analysis">
+      <div class="section-heading">
+        <div><p class="kicker">LOCAL · BUSINESS ANALYST</p><h2>Ask about sales and stock</h2><p class="muted">Get data-based trends, risks, and practical follow-up ideas without API credits.</p></div>
+      </div>
+      <article class="panel ai-chat">
+        <p class="muted small">Analysis runs on this computer using fixed report checks. No workbook data or API key is sent online. This local analyst is not a generative AI model.</p>
+        <div id="aiChatMessages" class="ai-chat-messages" aria-live="polite">
+          <p class="ai-message assistant">Ask about sales trends, plan gaps, product performance, stock risks, or data checks.</p>
+        </div>
+        <form id="aiChatForm" class="ai-chat-form">
+          <label>Analyze
+            <select id="aiChatScope">
+              <option value="both">Sales + stock</option>
+              <option value="sales">Sales only</option>
+              <option value="stock">Stock only</option>
+            </select>
+          </label>
+          <label class="ai-question-label">Your question
+            <textarea id="aiChatQuestion" rows="2" maxlength="1500" placeholder="Which states have high stock but low billing?" required></textarea>
+          </label>
+          <div class="ai-chat-actions">
+            <div class="language-buttons" role="group" aria-label="Analysis language">
+              <button class="button language-button selected" type="button" data-language="en" aria-pressed="true">English</button>
+              <button class="button language-button" type="button" data-language="hi" aria-pressed="false">हिन्दी</button>
+            </div>
+            <button id="aiChatSubmit" class="button primary" type="submit">Analyze</button>
+          </div>
+        </form>
+      </article>
+    </section>
+
+    <section class="stats" id="stats" aria-label="Key sales figures"></section>
+
+    <section class="section" id="period-comparison">
+      <div class="section-heading">
+        <div><p class="kicker">PERIOD · COMPARISON</p><h2>Current vs previous period</h2><p class="muted">Compare equal-length date ranges and identify state-level changes.</p></div>
+        <button class="button" id="downloadActionReport" type="button">Download action report</button>
+      </div>
+      <article class="panel table-panel period-comparison-panel">
+        <p id="comparisonStatus" class="muted small" aria-live="polite"></p>
+        <div id="comparisonSummary" class="comparison-summary"></div>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>State / region</th><th class="num">Previous sales (lakh)</th><th class="num">Current sales (lakh)</th><th class="num">Change (lakh)</th><th class="num">Change %</th></tr></thead>
+            <tbody id="comparisonRows"></tbody>
+          </table>
+        </div>
+        <p class="muted small">Comparison uses dated Raw sales without GST and excludes manual Nepal summary amounts. The preceding period must be covered by dates in the uploaded sales workbook. Percentage change is not shown when prior-period sales are zero.</p>
+      </article>
+    </section>
+
+    <section class="section" id="year-comparison">
+      <div class="section-heading">
+        <div><p class="kicker">YEAR · COMPARISON</p><h2>Compare with last year</h2><p class="muted">Upload the separate prior-year sales workbook to compare matching calendar dates.</p></div>
+      </div>
+      <article class="refresh-panel">
+        <div><h3>Last-year sales workbook</h3><p>Choose your FY 2025–26 sales workbook. This is stored separately and will not replace the current sales workbook.</p><p id="lastYearUploadStatus" class="upload-status" role="status">No last-year workbook uploaded.</p></div>
+        <label class="button primary upload-button" for="lastYearWorkbookFile">Choose last-year workbook<input id="lastYearWorkbookFile" type="file" accept=".xlsx" hidden></label>
+      </article>
+      <article class="panel table-panel period-comparison-panel">
+        <p id="yearComparisonStatus" class="muted small" aria-live="polite"></p>
+        <div id="yearComparisonSummary" class="comparison-summary"></div>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>State / region</th><th class="num">Last year (lakh)</th><th class="num">Current year (lakh)</th><th class="num">Change (lakh)</th><th class="num">Change %</th></tr></thead>
+            <tbody id="yearComparisonRows"></tbody>
+          </table>
+        </div>
+        <p class="muted small">Uses dated Raw sales without GST and compares matching dates one year apart. Manual summary-sheet amounts are excluded. The uploaded workbook must cover the full matching prior-year range.</p>
+      </article>
+    </section>
+
+    <section class="section" id="snapshot">
+      <div class="section-heading">
+        <div><p class="kicker">01 · DAILY SALES</p><h2>Sales snapshot</h2><p class="muted">Amounts without GST unless a card says “with tax”.</p></div>
+        <div class="date-filters">
+          <label>From <input type="date" id="dateFrom"></label>
+          <label>To <input type="date" id="dateTo"></label>
+          <button class="button primary" id="applyDates" type="button">Update view</button>
+        </div>
+      </div>
+      <div class="grid two">
+        <article class="panel">
+          <div class="panel-heading"><div><h3>Sales by day</h3><p class="muted" id="dailyCaption">Daily sales in lakh</p></div><span class="unit">LAKH</span></div>
+          <div id="dailyChart" role="img" aria-label="Daily sales chart"></div>
+        </article>
+      </div>
+    </section>
+
+    <section class="section" id="state-billing">
+      <div class="section-heading"><div><p class="kicker">STATE · BILLING</p><h2>State billing</h2><p class="muted" id="stateBillingCaption">Billing by state / region for the selected date range.</p></div><span class="unit">LAKH</span></div>
+      <div class="grid two">
+        <article class="panel">
+          <div class="panel-heading"><div><h3>Billing by state / region</h3><p class="muted">Ranked by billed sales, highest first</p></div><span class="unit">LAKH</span></div>
+          <div id="stateBillingChart" class="bar-list" role="img" aria-label="Billing by state or region"></div>
+        </article>
+        <article class="panel table-panel">
+          <div class="panel-heading"><div><h3>State billing ranking</h3><p class="muted">Billing rank follows billed amount; per-capita rank compares billing per resident. Ties share a rank.</p></div><span class="unit">LAKH · ₹ / PERSON</span></div>
+          <div class="table-scroll">
+            <table><thead><tr><th>Billing rank</th><th>State / region</th><th class="num">Billing</th><th class="num">Per-capita rank</th><th class="num">Population est.</th><th class="num">Billing / person</th><th class="num">Share</th></tr></thead><tbody id="stateBillingRows"></tbody></table>
+          </div>
+        </article>
+      </div>
+      <p class="muted small">Per-capita billing uses the projected population estimate for 1 July 2026. SO combines AP, TG, KR, KN, and TN; MH combines its component regions when present, otherwise the MH total. Nessa is treated as the Northeast group. Nepal and regions without population estimates are not per-capita ranked. Source: <span id="populationSourceLabel"></span> (<a id="populationSourceLink" target="_blank" rel="noopener noreferrer">source report</a>).</p>
+    </section>
+
+    <section class="section" id="weekly">
+      <div class="section-heading">
+        <div><p class="kicker">WEEKLY · STATE PERFORMANCE</p><h2>Week-wise performance</h2><p class="muted" id="weeklyCaption">Weekly plan and achievement by state from the planning workbook.</p></div>
+        <span class="unit" id="weeklyPeriod">WEEK</span>
+      </div>
+      <article class="refresh-panel weekly-upload-panel">
+        <div><h3>Weekly plan workbook</h3><p>Upload an .xlsx workbook with <strong>State</strong>, <strong>Week Plan</strong>, <strong>Week Ach.</strong>, and <strong>Balance</strong> columns on the first sheet.</p><p id="weeklyUploadStatus" class="upload-status" role="status">Current source: —</p></div>
+        <label class="button primary upload-button" for="weeklyWorkbookFile">Choose weekly plan<input id="weeklyWorkbookFile" type="file" accept=".xlsx" hidden></label>
+      </article>
+      <div id="weeklyEmpty" class="panel" hidden>No weekly plan is loaded. Upload the planning workbook to show week-wise performance.</div>
+      <div id="weeklyContent" hidden>
+        <div id="weeklyWarnings" class="quality-notes" aria-live="polite"></div>
+        <div id="weeklyStats" class="stats"></div>
+        <div id="weeklyInsights" class="insight-grid"></div>
+        <article class="panel table-panel">
+          <div class="panel-heading"><div><h3>Weekly performance by state / region</h3><p class="muted">Values are taken from the weekly planning workbook.</p></div><span class="unit">LAKH</span></div>
+          <div class="table-scroll">
+            <table><thead><tr><th>State / region</th><th class="num">Week plan</th><th class="num">Week achievement</th><th class="num">Achievement</th><th class="num">Balance</th></tr></thead><tbody id="weeklyRows"></tbody></table>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <section class="section" id="nepal">
+      <div class="section-heading"><div><p class="kicker">NEPAL · MANUAL SUMMARY</p><h2>Nepal sales</h2><p class="muted">Nepal figures from the Without GST summary sheet, shown separately from transaction dates.</p></div><span class="unit">LAKH</span></div>
+      <div id="nepalPanel" class="nepal-grid"></div>
+    </section>
+
+    <section class="section" id="improve">
+      <div class="section-heading"><div><p class="kicker">02 · WHERE TO IMPROVE</p><h2>Action points from the data</h2><p class="muted">These are areas to review; the workbook alone cannot explain the cause.</p></div></div>
+      <div id="insights" class="insight-grid"></div>
+      <article class="panel table-panel">
+        <div class="panel-heading"><div><h3>State / region plan progress</h3><p class="muted" id="planCaption">Plan, achievement, and remaining gap from the workbook.</p></div><span class="unit">LAKH</span></div>
+        <div class="table-scroll">
+          <table><thead><tr><th>State / region</th><th class="num">Plan</th><th class="num">Achieved</th><th class="num">Achievement</th><th class="num">Gap to plan</th></tr></thead><tbody id="planRows"></tbody></table>
+        </div>
+      </article>
+      <div id="qualityNotes" class="quality-notes" aria-live="polite"></div>
+    </section>
+
+    <section class="section" id="products">
+      <div class="section-heading"><div><p class="kicker">03 · PRODUCT MIX</p><h2>Product mix report</h2><p class="muted">Ranked by sales without GST for the selected date range.</p></div><span class="unit">LAKH</span></div>
+      <article class="panel"><div id="productBars" class="bar-list" role="img" aria-label="Product sales chart"></div><p class="muted small" id="productCaption"></p></article>
+    </section>
+
+    <section class="section" id="distributors">
+      <div class="section-heading"><div><p class="kicker">04 · FOLLOW UP</p><h2>Active distributors with zero billing</h2><p class="muted">From the workbook’s “Zero Billing DB” flag. Confirm with the representative before acting.</p></div><span class="status-pill" id="followCount">—</span></div>
+      <article class="panel table-panel">
+        <div class="table-tools">
+          <label class="search-label">Search distributor, code, or representative<input id="followSearch" type="search" placeholder="Type to search"></label>
+          <label>State / region<select id="stateFilter"><option value="">All states / regions</option></select></label>
+          <label>Representative<select id="repFilter"><option value="">All representatives</option></select></label>
+          <button class="button" id="downloadCsv" type="button">Download CSV</button>
+        </div>
+        <div class="table-scroll">
+          <table><thead><tr><th>Distributor</th><th>DB code</th><th>State / region</th><th>Sales representative</th><th>Area manager</th><th>Super stockist</th></tr></thead><tbody id="followRows"></tbody></table>
+        </div>
+        <div class="table-footer"><span id="pageSummary" aria-live="polite"></span><div class="pagination"><button class="button" id="prevPage" type="button">Previous</button><button class="button" id="nextPage" type="button">Next</button></div></div>
+      </article>
+    </section>
+
+    <section class="section" id="recurring">
+      <div class="section-heading"><div><p class="kicker">05 · RECURRING REPORT</p><h2>Upload and refresh</h2><p class="muted">A new workbook recalculates the whole page and is saved locally on this computer.</p></div></div>
+      <article class="refresh-panel">
+        <div><h3>Refresh from Excel</h3><p>Upload an <strong>.xlsx</strong> file with the <strong>Raw</strong> and <strong>SS to DB Sale</strong> sheets. The <strong>Without GST</strong> sheet adds plan-gap analysis.</p><p class="muted small">The app runs only while its local server is open. Scheduled email or updates while the computer is off need a separate scheduler/host.</p><p id="uploadStatus" class="upload-status" role="status">Current source: —</p></div>
+        <label class="button primary upload-button" for="workbookFile">Choose workbook<input id="workbookFile" type="file" accept=".xlsx" hidden></label>
+      </article>
+      <div class="footnote" id="dateWarning"></div>
+    </section>
+    <footer>Sales values are in lakh. “With tax” and “Without GST” are separate source measures. This report is for review; confirm unusual values with the source team.</footer>
+  </main>
+</body>
+</html>

@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Velnik MIS | Stock Report</title>
+  <link rel="stylesheet" href="/static/styles.css">
+  <script id="stock-data" type="application/json">__STOCK_DATA__</script>
+  <script src="/static/stock.js" defer></script>
+  <script src="/static/ai-chat.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/"><span class="brand-mark">V</span><span>VELNIK MIS</span></a>
+    <nav aria-label="Main navigation">
+      <a href="/">Sales report</a>
+      <a href="#stock-summary">Stock summary</a>
+      <a href="#stock-products">Products</a>
+      <a href="#stock-distributors">Distributors</a>
+      <a href="#ai-analysis">Local analysis</a>
+      <a href="#stock-upload">Upload</a>
+    </nav>
+    <div class="source-chip"><span class="live-dot" aria-hidden="true"></span><span id="stockSource">Stock workbook not loaded</span></div>
+  </header>
+
+  <main class="page" id="top">
+    <section class="hero">
+      <div>
+        <p class="kicker">INVENTORY · STOCK MIS</p>
+        <h1>Stock report</h1>
+        <p class="hero-copy">Product and state stock, distributor balances, and negative-stock checks.</p>
+      </div>
+      <div class="as-of"><span>STOCK AS OF</span><strong id="stockDate">—</strong></div>
+    </section>
+
+    <section class="section" id="ai-analysis">
+      <div class="section-heading">
+        <div><p class="kicker">LOCAL · BUSINESS ANALYST</p><h2>Ask about sales and stock</h2><p class="muted">Get data-based trends, risks, and practical follow-up ideas without API credits.</p></div>
+      </div>
+      <article class="panel ai-chat">
+        <p class="muted small">Analysis runs on this computer using fixed report checks. No workbook data or API key is sent online. This local analyst is not a generative AI model.</p>
+        <div id="aiChatMessages" class="ai-chat-messages" aria-live="polite">
+          <p class="ai-message assistant">Ask about stock risks, inventory leaders, sales trends, plan gaps, or data checks.</p>
+        </div>
+        <form id="aiChatForm" class="ai-chat-form">
+          <label>Analyze
+            <select id="aiChatScope">
+              <option value="both">Sales + stock</option>
+              <option value="sales">Sales only</option>
+              <option value="stock">Stock only</option>
+            </select>
+          </label>
+          <label class="ai-question-label">Your question
+            <textarea id="aiChatQuestion" rows="2" maxlength="1500" placeholder="Which states have high stock but low billing?" required></textarea>
+          </label>
+          <div class="ai-chat-actions">
+            <div class="language-buttons" role="group" aria-label="Analysis language">
+              <button class="button language-button selected" type="button" data-language="en" aria-pressed="true">English</button>
+              <button class="button language-button" type="button" data-language="hi" aria-pressed="false">हिन्दी</button>
+            </div>
+            <button id="aiChatSubmit" class="button primary" type="submit">Analyze</button>
+          </div>
+        </form>
+      </article>
+    </section>
+
+    <section class="section" id="stock-upload">
+      <article class="refresh-panel">
+        <div>
+          <h3>Upload stock workbook</h3>
+          <p>Choose the stock report Excel file. It is saved separately from the sales workbook.</p>
+          <p class="muted small">Required sheets: Stock, Item Stock CS &amp; SS Stock, and State wise Stock. Values are displayed as recorded in the workbook.</p>
+          <p id="stockUploadStatus" class="upload-status" role="status">No stock workbook loaded yet.</p>
+        </div>
+        <label class="button primary upload-button" for="stockWorkbookFile">Choose stock workbook<input id="stockWorkbookFile" type="file" accept=".xlsx" hidden></label>
+      </article>
+    </section>
+
+    <div id="stockEmpty" class="panel stock-empty" hidden>
+      <h2>Upload a stock workbook to build this report</h2>
+      <p class="muted">Your sales report will remain unchanged when you upload stock data here.</p>
+    </div>
+
+    <div id="stockContent" hidden>
+      <section class="stats" id="stock-summary" aria-label="Key stock figures"></section>
+
+      <section class="section" id="stock-products">
+        <div class="section-heading">
+          <div><p class="kicker">01 · STOCK MIX</p><h2>Stock by product</h2><p class="muted">CS and SS balances and negative stock from the workbook.</p></div>
+          <span class="unit">WORKBOOK VALUE</span>
+        </div>
+        <div class="grid two">
+          <article class="panel">
+            <div class="panel-heading"><div><h3>Highest stock by product</h3><p class="muted">Top 10 items by total stock</p></div></div>
+            <div id="stockProductBars" class="bar-list"></div>
+          </article>
+          <article class="panel">
+            <div class="panel-heading"><div><h3>Stock by state / region</h3><p class="muted">Totals summed from the State wise Stock sheet</p></div></div>
+            <div id="stockStateBars" class="bar-list"></div>
+          </article>
+        </div>
+        <article class="panel table-panel stock-table-panel">
+          <div class="panel-heading"><div><h3>Product stock details</h3><p class="muted">NPD stock is shown separately in the summary and is not added to this item total.</p></div></div>
+          <div class="table-scroll">
+            <table><thead><tr><th>Product</th><th class="num">CS</th><th class="num">SS</th><th class="num">Total</th><th class="num">Negative stock</th></tr></thead><tbody id="stockProductRows"></tbody></table>
+          </div>
+        </article>
+      </section>
+
+      <section class="section" id="stock-distributors">
+        <div class="section-heading">
+          <div><p class="kicker">02 · DISTRIBUTOR BALANCES</p><h2>Stock by distributor</h2><p class="muted">Select a state to download every product row from the uploaded State wise Stock sheet.</p></div>
+          <span class="status-pill" id="stockDistributorCount"></span>
+        </div>
+        <article class="panel table-panel">
+          <div class="table-tools">
+            <label class="search-label">Search name or state<input id="stockSearch" type="search" placeholder="Type to search"></label>
+            <label>State / region<select id="stockStateFilter"><option value="">All states / regions</option></select></label>
+            <button class="button" id="downloadStockCsv" type="button">Download state stock CSV</button>
+          </div>
+          <div class="table-scroll">
+            <table><thead><tr><th>Type</th><th>State / region</th><th>Distributor / stock point</th><th class="num">Total stock</th><th class="num">Negative items</th></tr></thead><tbody id="stockDistributorRows"></tbody></table>
+          </div>
+          <div class="table-footer"><span id="stockPageSummary" aria-live="polite"></span><div class="pagination"><button class="button" id="stockPrevPage" type="button">Previous</button><button class="button" id="stockNextPage" type="button">Next</button></div></div>
+        </article>
+      </section>
+    </div>
+    <footer>Stock figures are shown as provided in the uploaded workbook. Verify stock balances against the source before taking action.</footer>
+  </main>
+</body>
+</html>
