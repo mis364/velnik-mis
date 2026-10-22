@@ -1251,7 +1251,7 @@ input{{width:100%;padding:12px;border:1px solid #aab7ae;border-radius:6px;font:i
 button{{width:100%;margin-top:22px;padding:12px;border:0;border-radius:6px;
 background:#174a38;color:white;font:inherit;font-weight:600;cursor:pointer}}
 </style></head><body><main><button id="pageLanguageToggle" type="button" aria-label="पेज की भाषा हिंदी में बदलें" style="width:auto;margin:0 0 18px;padding:8px 12px">हिन्दी</button><h1>Velnik MIS</h1>
-<p>Reports are public. Sign in with the owner account to upload workbooks and update figures.</p>{message}
+<p>Sign in with the owner account to view reports, upload workbooks, and update figures.</p>{message}
 <form method="post" action="/login" autocomplete="on">
 <label for="username">Username</label><input id="username" name="username" autocomplete="username" required>
 <label for="password">Password</label><input id="password" name="password" type="password" autocomplete="current-password" required>
@@ -1312,6 +1312,15 @@ background:#174a38;color:white;font:inherit;font-weight:600;cursor:pointer}}
             self.send_header("Content-Length", "0")
             self.end_headers()
             return
+        if path in {"/", "/stock"}:
+            if not username or not password:
+                return self.send_bytes(
+                    503,
+                    b"Owner sign-in is not configured. Set SALES_MIS_USERNAME and SALES_MIS_PASSWORD.",
+                    "text/plain; charset=utf-8",
+                )
+            if not self._has_valid_session():
+                return self._redirect("/login")
         if path == "/backup-download":
             username, password = self._credentials()
             if not username or not password:
@@ -1480,6 +1489,7 @@ background:#174a38;color:white;font:inherit;font-weight:600;cursor:pointer}}
             "/stock-upload",
             "/weekly-upload",
             "/last-year-upload",
+            "/ai-chat",
         }
         if request_path in owner_routes:
             username, password = self._credentials()
@@ -1495,7 +1505,7 @@ background:#174a38;color:white;font:inherit;font-weight:600;cursor:pointer}}
                 b'{"ok":false,"error":"Sign in is required.","loginUrl":"/login"}',
                 "application/json; charset=utf-8",
             )
-        if request_path not in owner_routes and request_path != "/ai-chat":
+        if request_path not in owner_routes:
             return self.send_bytes(404, b"Not found", "text/plain; charset=utf-8")
         if request_path == "/ai-chat":
             try:

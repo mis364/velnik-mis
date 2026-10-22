@@ -39,34 +39,24 @@ class AuthenticationTests(unittest.TestCase):
         connection.close()
         return result
 
-    def test_reports_are_public_but_workbook_changes_require_owner_login(self):
+    def test_reports_and_workbook_changes_require_owner_login(self):
         status, _, body = self.request("GET", "/login")
         self.assertEqual(status, 200)
-        self.assertIn(b"Reports are public", body)
+        self.assertIn(b"Sign in with the owner account to view reports", body)
 
         status, _, body = self.request("GET", "/static/styles.css")
         self.assertEqual(status, 200)
         self.assertIn(b"--navy", body)
 
-        with patch.object(app, "get_stock_report", return_value={"available": False}):
-            status, _, body = self.request("GET", "/stock")
-        self.assertEqual(status, 200)
-        self.assertNotIn(b'id="stock-upload"', body)
-        self.assertIn(b"Owner sign in", body)
-        self.assertNotIn(b"Download backup", body)
+        for path in ("/", "/stock"):
+            status, headers, _ = self.request("GET", path)
+            self.assertEqual(status, 303, path)
+            self.assertEqual(dict(headers)["Location"], "/login")
 
-        for path in ("/upload", "/stock-upload", "/weekly-upload", "/last-year-upload", "/nepal-manual"):
+        for path in ("/upload", "/stock-upload", "/weekly-upload", "/last-year-upload", "/nepal-manual", "/ai-chat"):
             status, _, body = self.request("POST", path)
             self.assertEqual(status, 401, path)
             self.assertIn(b"Sign in is required", body)
-
-        status, _, body = self.request("GET", "/")
-        self.assertEqual(status, 200)
-        self.assertIn(b'id="report-data"', body)
-        self.assertIn(b"Owner sign in", body)
-        self.assertIn(b"/static/report-analysis.js", body)
-        self.assertNotIn(b"Choose workbook", body)
-        self.assertNotIn(b"Choose weekly plan", body)
 
         status, _, _ = self.request(
             "POST",
@@ -116,6 +106,15 @@ class AuthenticationTests(unittest.TestCase):
         )
         self.assertEqual(status, 400)
         self.assertNotIn(b"Sign in is required", body)
+
+        status, _, body = self.request(
+            "POST",
+            "/ai-chat",
+            body=json.dumps({}),
+            headers={"Cookie": cookie.split(";", 1)[0]},
+        )
+        self.assertEqual(status, 400)
+        self.assertIn(b"Enter a question", body)
 
         with patch.object(app, "get_stock_report", return_value={"available": False}):
             status, _, body = self.request(

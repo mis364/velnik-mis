@@ -39,12 +39,12 @@ From this folder, run `python -m unittest discover -s tests -v`. This runs the P
 
 ## Deploy on Render
 
-The included `render.yaml` configures a free Render web service. Reports are visible to anyone with the site URL; only the owner account can see workbook upload controls or change Nepal figures. To deploy:
+The included `render.yaml` configures a free Render web service. The owner account is required to view reports, upload workbooks, or change Nepal figures. To deploy:
 
 1. Push this project to a **private** GitHub repository. The tracked workbooks in `data/` may contain business-sensitive sales, stock, and distributor information. Never make this repository public with those files or publish them as sample data.
 2. In Render, choose **New > Blueprint**, connect that GitHub repository, and apply the `render.yaml` configuration.
 3. In the Render service's **Environment** settings, set `SALES_MIS_USERNAME` and `SALES_MIS_PASSWORD` to a unique username and a long, strong password. These values are secrets: do not put them in source code, commit them, or share them.
-4. Wait for the build to finish, then open the service URL shown in the Render dashboard. Visitors can view the reports directly. Choose **Owner sign in** and use your configured credentials to upload workbooks or update Nepal figures.
+4. Wait for the build to finish, then open the service URL shown in the Render dashboard. Sign in with your configured credentials to view reports, upload workbooks, or update Nepal figures.
 
 The service binds to Render's network interface and uses its assigned `PORT`. The health check exposes no report data. Upload and Nepal-update endpoints require the owner sign-in even if someone manually calls them; sessions expire after 12 hours and are cleared on a server restart. Use **Sign out** when finished. Free instances may sleep when idle and their filesystem is temporary: uploaded workbooks or other changes can be lost after a restart or redeploy.
 
@@ -56,7 +56,7 @@ Before replacing workbooks or a planned restart/redeploy, sign in and use **Down
 
 To restore a local installation, stop the server, extract the ZIP into the project's `data/` folder, allow the files to replace the existing copies, and restart the app. To restore on Render, sign in and upload the sales, stock, weekly, and prior-year workbooks from the archive through their respective report sections. Re-enter any Nepal manual figures using the archived `nepal_manual.json` as the reference; the app does not accept a ZIP restore upload.
 
-The report is intentionally public, so anyone who visits can see its figures and distributor details. The owner sign-in only restricts uploading and changing data; it does not make report contents private. GitHub repository access is separate from site access. Keep the repository private because its tracked workbooks contain business data; if it has ever been public, making it private does not remove copies from Git history or prior downloads.
+Reports and distributor details require owner sign-in. GitHub repository access is separate from site access. Keep the repository private because its tracked workbooks contain business data; if it has ever been public, making it private does not remove copies from Git history or prior downloads.
 
 ## Stock report workbook
 
@@ -70,4 +70,4 @@ The webpage recalculates when you upload a workbook, save Nepal figures, or relo
 
 ## Privacy
 
-When run locally, the server binds to `127.0.0.1` on this computer and workbooks are kept in this project folder. Starting the web server requires `SALES_MIS_USERNAME` and `SALES_MIS_PASSWORD`; the local site is available only on this computer by default. Local analysis uses fixed rules against report figures on this computer and does not send workbook data or API keys to an online service. In the cloud deployment, reports are public but uploading and changing figures require the configured owner sign-in.
+When run locally, the server binds to `127.0.0.1` on this computer and workbooks are kept in this project folder. Starting the web server requires `SALES_MIS_USERNAME` and `SALES_MIS_PASSWORD`; all reports and report analysis require the configured owner sign-in. Local analysis uses fixed rules against report figures on this computer and does not send workbook data or API keys to an online service. In the cloud deployment, reports, uploads, and data changes are all restricted to signed-in owners.

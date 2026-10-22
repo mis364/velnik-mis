@@ -255,7 +255,7 @@
     'Sign in': 'साइन इन',
     Username: 'उपयोगकर्ता नाम',
     Password: 'पासवर्ड',
-    'Reports are public. Sign in with the owner account to upload workbooks and update figures.': 'रिपोर्ट सभी के लिए सार्वजनिक हैं। वर्कबुक अपलोड करने और आँकड़े अपडेट करने के लिए मालिक के खाते से साइन इन करें।',
+    'Sign in with the owner account to view reports, upload workbooks, and update figures.': 'रिपोर्ट देखने, वर्कबुक अपलोड करने और आँकड़े अपडेट करने के लिए मालिक के खाते से साइन इन करें।',
     'Enter your username and password.': 'अपना उपयोगकर्ता नाम और पासवर्ड दर्ज करें।',
     'The username or password is incorrect.': 'उपयोगकर्ता नाम या पासवर्ड गलत है।',
     'Sign in | Velnik MIS': 'साइन इन | Velnik MIS',
