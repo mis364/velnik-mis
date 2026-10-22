@@ -8,8 +8,9 @@
   <script id="stock-data" type="application/json">__STOCK_DATA__</script>
   <script src="/static/stock.js" defer></script>
   <script src="/static/ai-chat.js" defer></script>
+  <script src="/static/language.js" defer></script>
 </head>
-<body>
+<body data-owner="__OWNER_SESSION__">
   <header class="topbar">
     <a class="brand" href="/"><span class="brand-mark">V</span><span>VELNIK MIS</span></a>
     <nav aria-label="Main navigation">
@@ -18,8 +19,10 @@
       <a href="#stock-products">Products</a>
       <a href="#stock-distributors">Distributors</a>
       <a href="#ai-analysis">Local analysis</a>
-      <a href="#stock-upload">Upload</a>
+      <a href="#stock-summary">Stock summary</a>
+      __OWNER_NAV__
     </nav>
+    <button class="button language-toggle" id="pageLanguageToggle" type="button" aria-label="पेज की भाषा हिंदी में बदलें">हिन्दी</button>
     <div class="source-chip"><span class="live-dot" aria-hidden="true"></span><span id="stockSource">Stock workbook not loaded</span></div>
   </header>
 
@@ -64,7 +67,7 @@
       </article>
     </section>
 
-    <section class="section" id="stock-upload">
+    <!--OWNER-ONLY--><section class="section" id="stock-upload">
       <article class="refresh-panel">
         <div>
           <h3>Upload stock workbook</h3>
@@ -74,11 +77,12 @@
         </div>
         <label class="button primary upload-button" for="stockWorkbookFile">Choose stock workbook<input id="stockWorkbookFile" type="file" accept=".xlsx" hidden></label>
       </article>
-    </section>
+    </section><!--/OWNER-ONLY-->
+    <!--GUEST-ONLY--><p class="muted small">Stock workbook uploads are managed by the owner.</p><!--/GUEST-ONLY-->
 
     <div id="stockEmpty" class="panel stock-empty" hidden>
       <h2>Upload a stock workbook to build this report</h2>
-      <p class="muted">Your sales report will remain unchanged when you upload stock data here.</p>
+      <p class="muted">The stock report is not available yet. The owner can sign in to upload a stock workbook.</p>
     </div>
 
     <div id="stockContent" hidden>

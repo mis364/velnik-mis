@@ -52,7 +52,8 @@ function populateReport() {
   document.getElementById('stockEmpty').hidden = true;
   document.getElementById('stockSource').textContent = DATA.source;
   document.getElementById('stockDate').textContent = DATA.reportDate || '—';
-  document.getElementById('stockUploadStatus').textContent = `Current source: ${DATA.source} · loaded ${DATA.loadedAt}`;
+  const uploadStatus = document.getElementById('stockUploadStatus');
+  if (uploadStatus) uploadStatus.textContent = `Current source: ${DATA.source} · loaded ${DATA.loadedAt}`;
   const stats = [
     ['Total stock', amount(DATA.summary.totalStock), 'From Item Stock CS & SS Stock'],
     ['CS stock', amount(DATA.summary.csStock), 'Stock-point balance'],
@@ -98,7 +99,7 @@ function populateReport() {
 }
 
 const uploadInput = document.getElementById('stockWorkbookFile');
-uploadInput.addEventListener('change', async event => {
+if (uploadInput) uploadInput.addEventListener('change', async event => {
   const file = event.target.files[0];
   if (!file) return;
   const status = document.getElementById('stockUploadStatus');

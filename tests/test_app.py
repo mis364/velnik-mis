@@ -1,12 +1,170 @@
 import json
+import http.client
+import os
 import tempfile
+import threading
 import unittest
+import zipfile
 from pathlib import Path
 from unittest.mock import patch
 
 import pandas as pd
 
 import app
+
+
+class AuthenticationTests(unittest.TestCase):
+    def setUp(self):
+        self.environment = patch.dict(
+            os.environ,
+            {"SALES_MIS_USERNAME": "owner", "SALES_MIS_PASSWORD": "test-password"},
+        )
+        self.environment.start()
+        self.server = app.ThreadingHTTPServer(("127.0.0.1", 0), app.SalesMISHandler)
+        self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
+        self.thread.start()
+        self.port = self.server.server_address[1]
+
+    def tearDown(self):
+        self.server.shutdown()
+        self.server.server_close()
+        self.thread.join()
+        self.environment.stop()
+
+    def request(self, method, path, body=None, headers=None):
+        connection = http.client.HTTPConnection("127.0.0.1", self.port)
+        connection.request(method, path, body=body, headers=headers or {})
+        response = connection.getresponse()
+        result = response.status, response.getheaders(), response.read()
+        connection.close()
+        return result
+
+    def test_reports_are_public_but_workbook_changes_require_owner_login(self):
+        status, _, body = self.request("GET", "/login")
+        self.assertEqual(status, 200)
+        self.assertIn(b"Reports are public", body)
+
+        status, _, body = self.request("GET", "/static/styles.css")
+        self.assertEqual(status, 200)
+        self.assertIn(b"--navy", body)
+
+        with patch.object(app, "get_stock_report", return_value={"available": False}):
+            status, _, body = self.request("GET", "/stock")
+        self.assertEqual(status, 200)
+        self.assertNotIn(b'id="stock-upload"', body)
+        self.assertIn(b"Owner sign in", body)
+        self.assertNotIn(b"Download backup", body)
+
+        for path in ("/upload", "/stock-upload", "/weekly-upload", "/last-year-upload", "/nepal-manual"):
+            status, _, body = self.request("POST", path)
+            self.assertEqual(status, 401, path)
+            self.assertIn(b"Sign in is required", body)
+
+        status, _, body = self.request("GET", "/")
+        self.assertEqual(status, 200)
+        self.assertIn(b'id="report-data"', body)
+        self.assertIn(b"Owner sign in", body)
+        self.assertIn(b"/static/report-analysis.js", body)
+        self.assertNotIn(b"Choose workbook", body)
+        self.assertNotIn(b"Choose weekly plan", body)
+
+        status, _, _ = self.request(
+            "POST",
+            "/login",
+            body="username=owner&password=wrong",
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+        )
+        self.assertEqual(status, 401)
+
+        status, headers, _ = self.request(
+            "POST",
+            "/login",
+            body="username=owner&password=test-password",
+            headers={
+                "Content-Type": "application/x-www-form-urlencoded",
+                "X-Forwarded-Proto": "https",
+            },
+        )
+        self.assertEqual(status, 303)
+        cookie = dict(headers)["Set-Cookie"]
+        self.assertIn("HttpOnly", cookie)
+        self.assertIn("SameSite=Strict", cookie)
+        self.assertIn("Secure", cookie)
+
+        status, _, body = self.request(
+            "GET",
+            "/static/styles.css",
+            headers={"Cookie": cookie.split(";", 1)[0]},
+        )
+        self.assertEqual(status, 200)
+        self.assertIn(b"--navy", body)
+
+        status, _, body = self.request(
+            "GET",
+            "/",
+            headers={"Cookie": cookie.split(";", 1)[0]},
+        )
+        self.assertEqual(status, 200)
+        self.assertIn(b'data-owner="true"', body)
+        self.assertIn(b"Choose workbook", body)
+        self.assertIn(b"Download backup", body)
+
+        status, _, body = self.request(
+            "POST",
+            "/upload",
+            headers={"Cookie": cookie.split(";", 1)[0]},
+        )
+        self.assertEqual(status, 400)
+        self.assertNotIn(b"Sign in is required", body)
+
+        with patch.object(app, "get_stock_report", return_value={"available": False}):
+            status, _, body = self.request(
+                "GET",
+                "/stock",
+                headers={"Cookie": cookie.split(";", 1)[0]},
+            )
+        self.assertEqual(status, 200)
+        self.assertIn(b'id="stock-upload"', body)
+
+    def test_missing_credentials_fail_closed(self):
+        with patch.dict(os.environ, {"SALES_MIS_USERNAME": "", "SALES_MIS_PASSWORD": ""}):
+            status, _, body = self.request("GET", "/login")
+        self.assertEqual(status, 503)
+        self.assertIn(b"Owner sign-in is not configured", body)
+
+    def test_backup_download_requires_owner_and_contains_only_report_files(self):
+        with tempfile.TemporaryDirectory() as directory:
+            data_dir = Path(directory)
+            (data_dir / "latest.xlsx").write_bytes(b"sales workbook")
+            (data_dir / "source.json").write_text('{"source_name":"sales.xlsx"}', encoding="utf-8")
+            (data_dir / "unrelated.txt").write_text("not included", encoding="utf-8")
+            with patch.object(app, "DATA_DIR", data_dir):
+                status, _, _ = self.request("GET", "/backup-download")
+                self.assertEqual(status, 401)
+
+                status, headers, _ = self.request(
+                    "POST",
+                    "/login",
+                    body="username=owner&password=test-password",
+                    headers={"Content-Type": "application/x-www-form-urlencoded"},
+                )
+                self.assertEqual(status, 303)
+                cookie = dict(headers)["Set-Cookie"].split(";", 1)[0]
+                status, headers, body = self.request(
+                    "GET",
+                    "/backup-download",
+                    headers={"Cookie": cookie},
+                )
+
+        self.assertEqual(status, 200)
+        self.assertEqual(dict(headers)["Content-Type"], "application/zip")
+        self.assertIn("attachment;", dict(headers)["Content-Disposition"])
+        with tempfile.TemporaryFile() as archive_file:
+            archive_file.write(body)
+            archive_file.seek(0)
+            with zipfile.ZipFile(archive_file) as backup:
+                self.assertEqual(set(backup.namelist()), {"latest.xlsx", "source.json"})
+                self.assertEqual(backup.read("latest.xlsx"), b"sales workbook")
 
 
 class ReplaceWorkbookTests(unittest.TestCase):

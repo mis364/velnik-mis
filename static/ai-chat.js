@@ -79,3 +79,13 @@ languageButtons.forEach(button => {
     if (lastQuestion) runAnalysis(lastQuestion, false);
   });
 });
+
+document.addEventListener('sales-mis-language-change', event => {
+  analysisLanguage = event.detail.language;
+  languageButtons.forEach(button => {
+    const selected = button.dataset.language === analysisLanguage;
+    button.classList.toggle('selected', selected);
+    button.setAttribute('aria-pressed', String(selected));
+  });
+  if (lastQuestion) runAnalysis(lastQuestion, false);
+});

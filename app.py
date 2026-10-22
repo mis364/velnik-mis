@@ -1,19 +1,23 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
+import hmac
 import json
 import mimetypes
 import os
 import re
 import tempfile
 import threading
+import time
+import zipfile
 from datetime import datetime
 from email import policy
 from email.parser import BytesParser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from io import BytesIO
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 try:
     import pandas as pd  # type: ignore[import-not-found]
@@ -21,6 +25,9 @@ except ModuleNotFoundError as exc:
     raise SystemExit(
         "Missing dependency: install it with `python -m pip install pandas openpyxl`."
     ) from exc
+
+from weekly import build_weekly_performance
+from workbook_utils import clean_text, number
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -37,9 +44,23 @@ WEEKLY_META_PATH = DATA_DIR / "weekly_source.json"
 LAST_YEAR_WORKBOOK_PATH = DATA_DIR / "last_year_sales.xlsx"
 LAST_YEAR_META_PATH = DATA_DIR / "last_year_source.json"
 MAX_UPLOAD_BYTES = 50 * 1024 * 1024
+MAX_BACKUP_BYTES = 250 * 1024 * 1024
+BACKUP_FILE_NAMES = (
+    "latest.xlsx",
+    "source.json",
+    "nepal_manual.json",
+    "stock_latest.xlsx",
+    "stock_source.json",
+    "weekly_plan.xlsx",
+    "weekly_source.json",
+    "last_year_sales.xlsx",
+    "last_year_source.json",
+)
+SESSION_COOKIE_NAME = "sales_mis_session"
+SESSION_TTL_SECONDS = 12 * 60 * 60
+SESSION_SIGNING_KEY = os.urandom(32)
 REQUIRED_SHEETS = {"Raw", "SS to DB Sale"}
 REQUIRED_STOCK_SHEETS = {"Stock", "Item Stock CS & SS Stock", "State wise Stock"}
-REQUIRED_WEEKLY_COLUMNS = {"State", "Week Plan", "Week Ach.", "Balance"}
 POPULATION_PROJECTIONS_2026 = {
     "MP": 89_965_000,
     "CG": 31_311_000,
@@ -641,17 +662,6 @@ def replace_workbook(contents, destination):
             temporary_path.unlink(missing_ok=True)
 
 
-def clean_text(value, fallback=""):
-    if pd.isna(value):
-        return fallback
-    return str(value).strip()
-
-
-def number(value):
-    parsed = pd.to_numeric(pd.Series([value]), errors="coerce").iloc[0]
-    return None if pd.isna(parsed) else float(parsed)
-
-
 def get_column(columns, predicate):
     for column in columns:
         if predicate(str(column).replace("\n", " ").strip().lower()):
@@ -1042,139 +1052,6 @@ def build_stock_report(workbook_source, source_name="stock_latest.xlsx", loaded_
     }
 
 
-def weekly_label(source_name):
-    match = re.search(
-        r"(\d{1,2})\s*[-–]\s*(\d{1,2})\s+([A-Za-z]{3,9})\s*['’]?\s*(\d{2,4})",
-        source_name,
-        re.IGNORECASE,
-    )
-    if not match:
-        return Path(source_name).stem
-    start_day, end_day, month_name, year_text = match.groups()
-    month = datetime.strptime(month_name[:3], "%b").strftime("%b")
-    year = int(year_text)
-    if year < 100:
-        year += 2000
-    return f"{int(start_day):02d}-{int(end_day):02d} {month} {year}"
-
-
-def build_weekly_performance(workbook_source, source_name="weekly_plan.xlsx", loaded_at=None):
-    """Read state week-plan, achievement, and balance values from the weekly workbook."""
-    sheet = pd.read_excel(workbook_source, sheet_name=0, header=0)
-    missing = REQUIRED_WEEKLY_COLUMNS - set(sheet.columns)
-    if missing:
-        raise ValueError("Weekly plan sheet is missing required column(s): " + ", ".join(sorted(missing)))
-
-    rollup_groups = {
-        "SO": {"AP", "TG", "KR", "KN", "TN"},
-        "MH": {"MH A", "MH AV", "MH BH", "MH B", "MH T"},
-    }
-    rows = []
-    for _, row in sheet.iterrows():
-        state = clean_text(row["State"])
-        if state.lower() in {"", "nan", "total", "grand total", "check"}:
-            continue
-        plan = number(row["Week Plan"])
-        achievement = number(row["Week Ach."])
-        balance = number(row["Balance"])
-        if plan is None and achievement is None and balance is None:
-            continue
-        rows.append({
-            "state": state,
-            "plan": plan,
-            "achievement": achievement,
-            "balance": balance,
-            "pct": achievement / plan if achievement is not None and plan else None,
-        })
-
-    rows_by_state = {row["state"].strip().upper(): row for row in rows}
-    rollups = {}
-    component_states = set()
-    warnings = []
-    for label, components in rollup_groups.items():
-        present_components = components & rows_by_state.keys()
-        if not present_components:
-            continue
-        component_rows = [rows_by_state[state] for state in components if state in rows_by_state]
-        if len(present_components) != len(components):
-            missing_components = sorted(components - present_components)
-            if label in rows_by_state:
-                component_states.update(components)
-                warnings.append(
-                    f"{label} component rows are incomplete ({', '.join(missing_components)} missing); "
-                    "the workbook-provided group total is shown."
-                )
-            else:
-                warnings.append(
-                    f"{label} group total is not calculated because component rows are missing: "
-                    + ", ".join(missing_components)
-                    + "."
-                )
-            continue
-        component_states.update(components)
-        totals = {
-            key: sum(row[key] or 0.0 for row in component_rows)
-            for key in ("plan", "achievement", "balance")
-        }
-        rollups[label] = {
-            "state": label,
-            **totals,
-            "pct": totals["achievement"] / totals["plan"] if totals["plan"] else None,
-        }
-
-    if rollups or component_states:
-        consolidated = []
-        emitted = set()
-        for row in rows:
-            state_key = row["state"].strip().upper()
-            if state_key in component_states:
-                label = next(label for label, components in rollup_groups.items() if state_key in components)
-                if label in rollups and label not in emitted:
-                    consolidated.append(rollups[label])
-                    emitted.add(label)
-                continue
-            if state_key in rollups:
-                if state_key not in emitted:
-                    consolidated.append(rollups[state_key])
-                    emitted.add(state_key)
-                continue
-            consolidated.append(row)
-        for label, rollup in rollups.items():
-            if label not in emitted:
-                consolidated.append(rollup)
-        rows = consolidated
-
-    if not rows:
-        raise ValueError("No state week-plan rows were found in the weekly workbook.")
-
-    attainment_rows = [row for row in rows if row["pct"] is not None]
-    best_attainment = max(attainment_rows, key=lambda row: row["pct"]) if attainment_rows else None
-    largest_balance = max(
-        (row for row in rows if row["balance"] is not None and row["balance"] > 0),
-        key=lambda row: row["balance"],
-        default=None,
-    )
-
-    return {
-        "available": True,
-        "source": source_name,
-        "loadedAt": loaded_at or datetime.now().strftime("%Y-%m-%d %H:%M"),
-        "weekLabel": weekly_label(source_name),
-        "warnings": warnings,
-        "growthInsights": {
-            "bestAttainment": best_attainment,
-            "largestBalance": largest_balance,
-        },
-        "summary": {
-            "plan": sum(row["plan"] or 0.0 for row in rows),
-            "achievement": sum(row["achievement"] or 0.0 for row in rows),
-            "balance": sum(row["balance"] or 0.0 for row in rows),
-            "stateCount": len(rows),
-        },
-        "states": rows,
-    }
-
-
 def read_metadata():
     if not META_PATH.exists():
         return {"source_name": WORKBOOK_PATH.name, "loaded_at": "Initial workbook"}
@@ -1304,18 +1181,171 @@ def validate_weekly_workbook_bytes(contents):
 class SalesMISHandler(BaseHTTPRequestHandler):
     server_version = "SalesMIS/1.0"
 
+    @staticmethod
+    def _credentials():
+        username = os.environ.get("SALES_MIS_USERNAME", "")
+        password = os.environ.get("SALES_MIS_PASSWORD", "")
+        return username, password
+
+    @classmethod
+    def _session_signature(cls, expires):
+        username, password = cls._credentials()
+        credentials = f"{username}\0{password}".encode("utf-8")
+        key = hmac.new(SESSION_SIGNING_KEY, credentials, hashlib.sha256).digest()
+        return hmac.new(key, expires.encode("ascii"), hashlib.sha256).hexdigest()
+
+    def _has_valid_session(self):
+        cookie_header = self.headers.get("Cookie", "")
+        cookie = next(
+            (
+                part.strip().partition("=")[2]
+                for part in cookie_header.split(";")
+                if part.strip().startswith(SESSION_COOKIE_NAME + "=")
+            ),
+            "",
+        )
+        expires, separator, signature = cookie.partition(".")
+        if (
+            not separator
+            or not expires.isascii()
+            or not expires.isdigit()
+            or len(expires) > 12
+            or not signature
+        ):
+            return False
+        if int(expires) < int(time.time()):
+            return False
+        return hmac.compare_digest(signature, self._session_signature(expires))
+
+    def _cookie_attributes(self, max_age):
+        attributes = [
+            f"{SESSION_COOKIE_NAME}=; Path=/",
+            f"Max-Age={max_age}",
+            "HttpOnly",
+            "SameSite=Strict",
+        ]
+        if self.headers.get("X-Forwarded-Proto", "").split(",", 1)[0].strip().lower() == "https":
+            attributes.append("Secure")
+        return "; ".join(attributes)
+
+    def _send_login_page(self, status=200, error=""):
+        message = (
+            f'<p role="alert" style="color:#b42318">{error}</p>'
+            if error
+            else ""
+        )
+        page = f"""<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Sign in | Velnik MIS</title>
+<script src="/static/language.js" defer></script>
+<style>
+*{{box-sizing:border-box}}body{{margin:0;min-height:100vh;display:grid;place-items:center;
+background:#f4f6f3;color:#1c2c25;font:16px Arial,sans-serif}}
+main{{width:min(100% - 32px,400px);padding:32px;background:#fff;border:1px solid #dfe5e0;
+border-radius:12px;box-shadow:0 8px 28px #243b2f12}}
+h1{{margin:0 0 8px;font-size:24px}}p{{color:#58665f}}
+label{{display:block;margin:18px 0 6px;font-weight:600}}
+input{{width:100%;padding:12px;border:1px solid #aab7ae;border-radius:6px;font:inherit}}
+button{{width:100%;margin-top:22px;padding:12px;border:0;border-radius:6px;
+background:#174a38;color:white;font:inherit;font-weight:600;cursor:pointer}}
+</style></head><body><main><button id="pageLanguageToggle" type="button" aria-label="पेज की भाषा हिंदी में बदलें" style="width:auto;margin:0 0 18px;padding:8px 12px">हिन्दी</button><h1>Velnik MIS</h1>
+<p>Reports are public. Sign in with the owner account to upload workbooks and update figures.</p>{message}
+<form method="post" action="/login" autocomplete="on">
+<label for="username">Username</label><input id="username" name="username" autocomplete="username" required>
+<label for="password">Password</label><input id="password" name="password" type="password" autocomplete="current-password" required>
+<button type="submit">Sign in</button></form></main></body></html>"""
+        return self.send_bytes(status, page.encode("utf-8"), "text/html; charset=utf-8")
+
+    def _redirect(self, location):
+        self.send_response(303)
+        self.send_header("Location", location)
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("Content-Length", "0")
+        self.end_headers()
+
     def send_bytes(self, status, body, content_type):
         self.send_response(status)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("Referrer-Policy", "no-referrer")
         self.end_headers()
         self.wfile.write(body)
+
+    def _render_owner_controls(self, template):
+        is_owner = self._has_valid_session()
+        template = template.replace("__OWNER_SESSION__", str(is_owner).lower())
+        template = template.replace(
+            "__OWNER_NAV__",
+            (
+                '<a href="/backup-download">Download backup</a><a href="/logout">Sign out</a>'
+                if is_owner else '<a href="/login">Owner sign in</a>'
+            ),
+        )
+        if is_owner:
+            return re.sub(r"<!--GUEST-ONLY-->.*?<!--/GUEST-ONLY-->", "", template, flags=re.DOTALL)
+        return re.sub(r"<!--OWNER-ONLY-->.*?<!--/OWNER-ONLY-->", "", template, flags=re.DOTALL)
 
     def do_GET(self):
         path = urlparse(self.path).path
         if path == "/health":
             return self.send_bytes(200, b"ok", "text/plain; charset=utf-8")
+        username, password = self._credentials()
+        if path == "/login":
+            if not username or not password:
+                return self.send_bytes(
+                    503,
+                    b"Owner sign-in is not configured. Set SALES_MIS_USERNAME and SALES_MIS_PASSWORD.",
+                    "text/plain; charset=utf-8",
+                )
+            if self._has_valid_session():
+                return self._redirect("/")
+            return self._send_login_page()
+        if path == "/logout":
+            self.send_response(303)
+            self.send_header("Location", "/login")
+            self.send_header("Set-Cookie", self._cookie_attributes(0))
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            return
+        if path == "/backup-download":
+            username, password = self._credentials()
+            if not username or not password:
+                return self.send_bytes(
+                    503,
+                    b"Owner sign-in is not configured. Set SALES_MIS_USERNAME and SALES_MIS_PASSWORD.",
+                    "text/plain; charset=utf-8",
+                )
+            if not self._has_valid_session():
+                return self.send_bytes(401, b"Sign in is required to download a backup.", "text/plain; charset=utf-8")
+            files = [
+                DATA_DIR / filename
+                for filename in BACKUP_FILE_NAMES
+                if (DATA_DIR / filename).is_file()
+            ]
+            total_size = sum(path.stat().st_size for path in files)
+            if total_size > MAX_BACKUP_BYTES:
+                return self.send_bytes(413, b"Backup exceeds the 250 MB download limit.", "text/plain; charset=utf-8")
+            archive = BytesIO()
+            with zipfile.ZipFile(archive, "w", compression=zipfile.ZIP_DEFLATED) as backup:
+                for path in files:
+                    backup.write(path, arcname=path.name)
+            filename = f"sales-mis-backup-{datetime.now().strftime('%Y%m%d-%H%M%S')}.zip"
+            body = archive.getvalue()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/zip")
+            self.send_header("Content-Disposition", f'attachment; filename="{filename}"')
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("X-Content-Type-Options", "nosniff")
+            self.send_header("Referrer-Policy", "no-referrer")
+            self.end_headers()
+            self.wfile.write(body)
+            return
         if path.startswith("/static/"):
             filename = Path(path.removeprefix("/static/")).name
             file_path = STATIC_DIR / filename
@@ -1329,6 +1359,7 @@ class SalesMISHandler(BaseHTTPRequestHandler):
                 template = (TEMPLATE_DIR / "stock.html").read_text(encoding="utf-8")
                 encoded = json.dumps(payload, ensure_ascii=False, separators=(",", ":"), allow_nan=False).replace("</", "<\\/")
                 page = template.replace("__STOCK_DATA__", encoded)
+                page = self._render_owner_controls(page)
                 return self.send_bytes(200, page.encode("utf-8"), "text/html; charset=utf-8")
             except Exception as exc:
                 body = ("<h1>Could not build the stock report</h1><p>" + str(exc) + "</p>").encode("utf-8")
@@ -1381,6 +1412,7 @@ class SalesMISHandler(BaseHTTPRequestHandler):
             template = (TEMPLATE_DIR / "index.html").read_text(encoding="utf-8")
             encoded = json.dumps(payload, ensure_ascii=False, separators=(",", ":"), allow_nan=False).replace("</", "<\\/")
             page = template.replace("__REPORT_DATA__", encoded)
+            page = self._render_owner_controls(page)
             return self.send_bytes(200, page.encode("utf-8"), "text/html; charset=utf-8")
         except Exception as exc:
             body = ("<h1>Could not build the report</h1><p>" + str(exc) + "</p>").encode("utf-8")
@@ -1388,6 +1420,83 @@ class SalesMISHandler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         request_path = urlparse(self.path).path
+        if request_path == "/login":
+            username, password = self._credentials()
+            if not username or not password:
+                return self.send_bytes(
+                    503,
+                    b"Owner sign-in is not configured. Set SALES_MIS_USERNAME and SALES_MIS_PASSWORD.",
+                    "text/plain; charset=utf-8",
+                )
+            try:
+                content_length = int(self.headers.get("Content-Length", "0"))
+                if content_length <= 0 or content_length > 8_192:
+                    raise ValueError
+                if "application/x-www-form-urlencoded" not in self.headers.get("Content-Type", ""):
+                    raise ValueError
+                form = parse_qs(self.rfile.read(content_length).decode("utf-8"), strict_parsing=True)
+                submitted_username = form.get("username", [""])[0]
+                submitted_password = form.get("password", [""])[0]
+            except (UnicodeDecodeError, ValueError):
+                return self._send_login_page(400, "Enter your username and password.")
+            username_matches = hmac.compare_digest(
+                submitted_username.encode("utf-8"),
+                username.encode("utf-8"),
+            )
+            password_matches = hmac.compare_digest(
+                submitted_password.encode("utf-8"),
+                password.encode("utf-8"),
+            )
+            if not (username_matches and password_matches):
+                return self._send_login_page(401, "The username or password is incorrect.")
+            expires = str(int(time.time()) + SESSION_TTL_SECONDS)
+            signature = self._session_signature(expires)
+            self.send_response(303)
+            self.send_header("Location", "/")
+            self.send_header(
+                "Set-Cookie",
+                f"{SESSION_COOKIE_NAME}={expires}.{signature}; Path=/; Max-Age={SESSION_TTL_SECONDS}; HttpOnly; SameSite=Strict"
+                + (
+                    "; Secure"
+                    if self.headers.get("X-Forwarded-Proto", "").split(",", 1)[0].strip().lower() == "https"
+                    else ""
+                ),
+            )
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            return
+        if request_path == "/logout":
+            self.send_response(303)
+            self.send_header("Location", "/login")
+            self.send_header("Set-Cookie", self._cookie_attributes(0))
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            return
+        owner_routes = {
+            "/nepal-manual",
+            "/upload",
+            "/stock-upload",
+            "/weekly-upload",
+            "/last-year-upload",
+        }
+        if request_path in owner_routes:
+            username, password = self._credentials()
+            if not username or not password:
+                return self.send_bytes(
+                    503,
+                    b"Owner sign-in is not configured. Set SALES_MIS_USERNAME and SALES_MIS_PASSWORD.",
+                    "text/plain; charset=utf-8",
+                )
+        if request_path in owner_routes and not self._has_valid_session():
+            return self.send_bytes(
+                401,
+                b'{"ok":false,"error":"Sign in is required.","loginUrl":"/login"}',
+                "application/json; charset=utf-8",
+            )
+        if request_path not in owner_routes and request_path != "/ai-chat":
+            return self.send_bytes(404, b"Not found", "text/plain; charset=utf-8")
         if request_path == "/ai-chat":
             try:
                 content_length = int(self.headers.get("Content-Length", "0"))
@@ -1567,6 +1676,10 @@ def main():
             "UK": next((x for x in report["reconciliation"] if x["state"] == "UK"), None),
         }, ensure_ascii=False, indent=2))
         return
+    if not all(SalesMISHandler._credentials()):
+        raise SystemExit(
+            "Set SALES_MIS_USERNAME and SALES_MIS_PASSWORD before starting the web server."
+        )
     server = ThreadingHTTPServer((args.host, args.port), SalesMISHandler)
     if args.host == "127.0.0.1":
         print(f"Sales MIS is running locally at http://127.0.0.1:{args.port}")

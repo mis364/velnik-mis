@@ -1,4 +1,5 @@
 const DATA = JSON.parse(document.getElementById('report-data').textContent);
+const REPORT_ANALYSIS = globalThis.SalesMISAnalysis;
 const PAGE_SIZE = 25;
 let pageNumber = 0;
 const money = value => new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(value) || 0);
@@ -37,87 +38,9 @@ function aggregate(items, start, end) {
   return [...map.entries()].map(([label, value]) => ({ label, value })).sort((a, b) => b.value - a.value);
 }
 
-function comparisonPeriods(from, to) {
-  const dayCount = Math.round((dateAt(to) - dateAt(from)) / 86400000) + 1;
-  const previousTo = plusDay(from, -1);
-  const previousFrom = plusDay(previousTo, -(dayCount - 1));
-  return { from, to, previousFrom, previousTo };
-}
-
-function periodComparison() {
-  const selected = fromTo();
-  const { from, to, previousFrom, previousTo } = comparisonPeriods(selected.from, selected.to);
-  const history = DATA.history;
-  if (!history || history.start > previousFrom || history.end < previousTo) {
-    return { available: false, from, to, previousFrom, previousTo };
-  }
-  const current = total(history.daily.filter(row => row.date >= from && row.date <= to), 'net');
-  const previous = total(history.daily.filter(row => row.date >= previousFrom && row.date <= previousTo), 'net');
-  const normalizedStateTotals = (start, end) => {
-    const totals = new Map();
-    for (const row of aggregate(history.stateByDay, start, end)) {
-      const key = row.label.trim().toUpperCase();
-      const existing = totals.get(key);
-      totals.set(key, {
-        label: existing?.label || row.label,
-        value: (existing?.value || 0) + row.value,
-      });
-    }
-    return totals;
-  };
-  const currentStates = normalizedStateTotals(from, to);
-  const previousStates = normalizedStateTotals(previousFrom, previousTo);
-  const stateKeys = new Set([...currentStates.keys(), ...previousStates.keys()]);
-  const states = [...stateKeys].map(key => {
-    const currentSales = currentStates.get(key)?.value || 0;
-    const previousSales = previousStates.get(key)?.value || 0;
-    return {
-      state: currentStates.get(key)?.label || previousStates.get(key).label,
-      currentSales,
-      previousSales,
-      change: currentSales - previousSales,
-      changePct: previousSales ? (currentSales - previousSales) / Math.abs(previousSales) * 100 : null,
-    };
-  }).sort((a, b) => Math.abs(b.change) - Math.abs(a.change) || a.state.localeCompare(b.state));
-  const previousPctChange = previous ? (current - previous) / Math.abs(previous) * 100 : null;
-  return {
-    available: true,
-    from,
-    to,
-    previousFrom,
-    previousTo,
-    current,
-    previous,
-    change: current - previous,
-    changePct: previousPctChange,
-    states,
-  };
-}
-
-function stockBillingOpportunities(comparison) {
-  const inventory = DATA.stockStateData;
-  if (!comparison?.available || !inventory?.states?.length) return [];
-  const stockByName = new Map(inventory.states.map(row => [row.state.trim().toUpperCase(), Number(row.total) || 0]));
-  const matched = comparison.states.filter(row => stockByName.has(row.state.trim().toUpperCase()));
-  if (matched.length < 2) return [];
-  const median = values => {
-    const sorted = [...values].sort((a, b) => a - b);
-    const middle = Math.floor(sorted.length / 2);
-    return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
-  };
-  const stockMedian = median(matched.map(row => stockByName.get(row.state.trim().toUpperCase())));
-  const billingMedian = median(matched.map(row => row.currentSales));
-  return matched
-    .filter(row =>
-      stockByName.get(row.state.trim().toUpperCase()) > stockMedian &&
-      row.currentSales < billingMedian
-    )
-    .map(row => ({ ...row, stock: stockByName.get(row.state.trim().toUpperCase()) }))
-    .sort((a, b) => b.stock - a.stock || a.currentSales - b.currentSales);
-}
-
 function renderPeriodComparison() {
-  const comparison = periodComparison();
+  const { from, to } = fromTo();
+  const comparison = REPORT_ANALYSIS.periodComparison(DATA.history, from, to);
   const status = document.getElementById('comparisonStatus');
   const summary = document.getElementById('comparisonSummary');
   const rows = document.getElementById('comparisonRows');
@@ -145,66 +68,14 @@ function renderPeriodComparison() {
     : '<tr><td colspan="5" class="empty">No state/region billing is available in these periods.</td></tr>';
 }
 
-function matchingDateLastYear(key) {
-  const date = dateAt(key);
-  const year = date.getUTCFullYear() - 1;
-  const month = date.getUTCMonth();
-  const day = Math.min(date.getUTCDate(), new Date(Date.UTC(year, month + 1, 0)).getUTCDate());
-  return `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-}
-
-function yearOverYearComparison() {
-  const { from, to } = fromTo();
-  const previousFrom = matchingDateLastYear(from);
-  const previousTo = matchingDateLastYear(to);
-  const history = DATA.lastYearData?.history;
-  if (!history || history.start > previousFrom || history.end < previousTo) {
-    return { available: false, from, to, previousFrom, previousTo };
-  }
-  const currentHistory = DATA.history;
-  const current = total(currentHistory.daily.filter(row => row.date >= from && row.date <= to), 'net');
-  const previous = total(history.daily.filter(row => row.date >= previousFrom && row.date <= previousTo), 'net');
-  const stateTotals = (source, start, end) => {
-    const totals = new Map();
-    for (const row of aggregate(source, start, end)) {
-      const key = row.label.trim().toUpperCase();
-      const existing = totals.get(key);
-      totals.set(key, {
-        label: existing?.label || row.label,
-        value: (existing?.value || 0) + row.value,
-      });
-    }
-    return totals;
-  };
-  const currentStates = stateTotals(currentHistory.stateByDay, from, to);
-  const previousStates = stateTotals(history.stateByDay, previousFrom, previousTo);
-  const states = [...new Set([...currentStates.keys(), ...previousStates.keys()])].map(key => {
-    const currentSales = currentStates.get(key)?.value || 0;
-    const previousSales = previousStates.get(key)?.value || 0;
-    return {
-      state: currentStates.get(key)?.label || previousStates.get(key).label,
-      currentSales,
-      previousSales,
-      change: currentSales - previousSales,
-      changePct: previousSales ? (currentSales - previousSales) / Math.abs(previousSales) * 100 : null,
-    };
-  }).sort((a, b) => Math.abs(b.change) - Math.abs(a.change) || a.state.localeCompare(b.state));
-  return {
-    available: true,
-    from,
-    to,
-    previousFrom,
-    previousTo,
-    current,
-    previous,
-    change: current - previous,
-    changePct: previous ? (current - previous) / Math.abs(previous) * 100 : null,
-    states,
-  };
-}
-
 function renderYearOverYearComparison() {
-  const comparison = yearOverYearComparison();
+  const { from, to } = fromTo();
+  const comparison = REPORT_ANALYSIS.yearOverYearComparison(
+    DATA.history,
+    DATA.lastYearData?.history,
+    from,
+    to
+  );
   const status = document.getElementById('yearComparisonStatus');
   const summary = document.getElementById('yearComparisonSummary');
   const rows = document.getElementById('yearComparisonRows');
@@ -238,7 +109,8 @@ function renderYearOverYearComparison() {
 }
 
 function downloadActionReport() {
-  const comparison = periodComparison();
+  const { from, to } = fromTo();
+  const comparison = REPORT_ANALYSIS.periodComparison(DATA.history, from, to);
   const rows = [['Section', 'State / region', 'Current period', 'Previous period', 'Change', 'Change %', 'Stock (workbook units)', 'Suggested follow-up']];
   if (comparison.available) {
     rows.push([
@@ -263,7 +135,7 @@ function downloadActionReport() {
         state.change < 0 ? 'Review billing decline, coverage, and open orders.' : 'Review drivers of growth and repeat successful actions.',
       ]);
     }
-    for (const row of stockBillingOpportunities(comparison)) {
+    for (const row of REPORT_ANALYSIS.stockBillingOpportunities(comparison, DATA.stockStateData)) {
       rows.push([
         'High stock / low billing review',
         row.state,
@@ -287,7 +159,12 @@ function downloadActionReport() {
       'Upload a sales workbook containing the full previous equal-length period.',
     ]);
   }
-  const yearComparison = yearOverYearComparison();
+  const yearComparison = REPORT_ANALYSIS.yearOverYearComparison(
+    DATA.history,
+    DATA.lastYearData?.history,
+    from,
+    to
+  );
   if (yearComparison.available) {
     rows.push([
       'Year-over-year comparison',
@@ -389,7 +266,8 @@ function renderWeeklyPerformance() {
 
   document.getElementById('weeklyPeriod').textContent = weekly.weekLabel || 'WEEK';
   document.getElementById('weeklyCaption').textContent = `Weekly plan and achievement from ${weekly.source}.`;
-  document.getElementById('weeklyUploadStatus').textContent = `Current source: ${weekly.source} · loaded ${weekly.loadedAt}`;
+  const weeklyUploadStatus = document.getElementById('weeklyUploadStatus');
+  if (weeklyUploadStatus) weeklyUploadStatus.textContent = `Current source: ${weekly.source} · loaded ${weekly.loadedAt}`;
   const weeklyWarnings = document.getElementById('weeklyWarnings');
   weeklyWarnings.innerHTML = (weekly.warnings || []).length
     ? `<h3>Weekly data checks</h3><ul>${weekly.warnings.map(warning => `<li>${safe(warning)}</li>`).join('')}</ul>`
@@ -585,7 +463,8 @@ function renderInsights() {
   else if (DATA.reconciliation?.length) issues.push('State / region achievements reconcile with Raw within 0.02 lakh.');
   if (DATA.nepalManual?.includedInPeriod) issues.push(`Nepal summary achievement of ${money(DATA.nepalManual.manualValue)} lakh is included in the period total, state chart, and product mix. Raw has no Nepal transaction dates, so it is not spread across the daily chart.`);
   document.getElementById('qualityNotes').innerHTML = issues.length ? `<h3>Data checks</h3><ul>${issues.map(issue=>`<li>${safe(issue)}</li>`).join('')}</ul>` : '';
-  document.getElementById('dateWarning').textContent = DATA.loadedAt ? `Last loaded: ${DATA.loadedAt}` : '';
+  const dateWarning = document.getElementById('dateWarning');
+  if (dateWarning) dateWarning.textContent = DATA.loadedAt ? `Last loaded: ${DATA.loadedAt}` : '';
 }
 
 function renderNepalPanel() {
@@ -594,7 +473,10 @@ function renderNepalPanel() {
   if (!nepal) { target.innerHTML = '<article class="panel">No NP summary row was found in the Without GST sheet.</article>'; return; }
   const pct = Number(nepal.achievementPct) || (nepal.plan ? nepal.achievement / nepal.plan : 0);
   const productRows = (nepal.productSales || []).map((item,index) => `<label>${safe(item.product)}<input type="number" step="0.01" min="0" data-nepal-product="${index}" value="${Number(item.value||0).toFixed(2)}"></label>`).join('');
-  target.innerHTML = `<article class="panel nepal-main"><div class="nepal-metrics"><div class="nepal-metric"><span>Monthly billing achievement</span><strong>${money(nepal.achievement)} lakh</strong><small>Plan ${money(nepal.plan)} lakh · ${(pct*100).toFixed(1)}%</small></div><div class="nepal-metric"><span>Billing on ${safe(nepal.dailyHeader || 'summary date')}</span><strong>${money(nepal.dailyBilling)} lakh</strong><small>Dated summary value</small></div><div class="nepal-metric"><span>Today's average plan</span><strong>${money(nepal.todayPlan)} lakh</strong><small>Today's achievement ${money(nepal.todayAchievement)} lakh</small></div></div><p class="nepal-note">${nepal.includedInPeriod ? `${money(nepal.achievement)} lakh is included in the period total, Nepal state chart, and product mix.` : 'Nepal transactions already appear in Raw, so the monthly amount is not added twice.'} The daily chart uses dated Raw transactions; the summary does not provide daily Nepal transaction detail.</p></article><form id="nepalManualForm" class="panel nepal-form"><h3>Update Nepal figures</h3><p class="muted small">Enter amounts in lakh. Saving updates the webpage and keeps the values on this computer for this reporting month.</p><div class="nepal-input-grid"><label>Monthly plan<input name="plan" type="number" step="0.01" value="${Number(nepal.plan||0).toFixed(2)}" required></label><label>Monthly billing achievement<input name="achievement" id="nepalAchievement" type="number" step="0.01" value="${Number(nepal.achievement||0).toFixed(2)}" required></label><label>Billing on ${safe(nepal.dailyHeader || 'summary date')}<input name="dailyBilling" type="number" step="0.01" value="${Number(nepal.dailyBilling||0).toFixed(2)}" required></label><label>Today's average plan<input name="todayPlan" type="number" step="0.01" value="${Number(nepal.todayPlan||0).toFixed(2)}" required></label><label>Today's achievement<input name="todayAchievement" type="number" step="0.01" value="${Number(nepal.todayAchievement||0).toFixed(2)}" required></label></div><h4>Nepal product sales (lakh)</h4><div class="nepal-input-grid">${productRows}</div><p class="muted small">If you change only the monthly achievement, Other / Range Value adjusts to balance the Nepal product mix. You can also edit the product amounts.</p><div class="nepal-form-footer"><button class="button primary" type="submit">Save Nepal figures</button><span id="nepalSaveStatus" role="status"></span></div></form>`;
+  const ownerControls = document.body.dataset.owner === 'true';
+  const editForm = ownerControls ? `<form id="nepalManualForm" class="panel nepal-form"><h3>Update Nepal figures</h3><p class="muted small">Enter amounts in lakh. Saving updates the report for this reporting month.</p><div class="nepal-input-grid"><label>Monthly plan<input name="plan" type="number" step="0.01" value="${Number(nepal.plan||0).toFixed(2)}" required></label><label>Monthly billing achievement<input name="achievement" id="nepalAchievement" type="number" step="0.01" value="${Number(nepal.achievement||0).toFixed(2)}" required></label><label>Billing on ${safe(nepal.dailyHeader || 'summary date')}<input name="dailyBilling" type="number" step="0.01" value="${Number(nepal.dailyBilling||0).toFixed(2)}" required></label><label>Today's average plan<input name="todayPlan" type="number" step="0.01" value="${Number(nepal.todayPlan||0).toFixed(2)}" required></label><label>Today's achievement<input name="todayAchievement" type="number" step="0.01" value="${Number(nepal.todayAchievement||0).toFixed(2)}" required></label></div><h4>Nepal product sales (lakh)</h4><div class="nepal-input-grid">${productRows}</div><p class="muted small">If you change only the monthly achievement, Other / Range Value adjusts to balance the Nepal product mix. You can also edit the product amounts.</p><div class="nepal-form-footer"><button class="button primary" type="submit">Save Nepal figures</button><span id="nepalSaveStatus" role="status"></span></div></form>` : '';
+  target.innerHTML = `<article class="panel nepal-main"><div class="nepal-metrics"><div class="nepal-metric"><span>Monthly billing achievement</span><strong>${money(nepal.achievement)} lakh</strong><small>Plan ${money(nepal.plan)} lakh · ${(pct*100).toFixed(1)}%</small></div><div class="nepal-metric"><span>Billing on ${safe(nepal.dailyHeader || 'summary date')}</span><strong>${money(nepal.dailyBilling)} lakh</strong><small>Dated summary value</small></div><div class="nepal-metric"><span>Today's average plan</span><strong>${money(nepal.todayPlan)} lakh</strong><small>Today's achievement ${money(nepal.todayAchievement)} lakh</small></div></div><p class="nepal-note">${nepal.includedInPeriod ? `${money(nepal.achievement)} lakh is included in the period total, Nepal state chart, and product mix.` : 'Nepal transactions already appear in Raw, so the monthly amount is not added twice.'} The daily chart uses dated Raw transactions; the summary does not provide daily Nepal transaction detail.</p></article>${editForm}`;
+  if (!ownerControls) return;
   const form = document.getElementById('nepalManualForm');
   const achievementInput = document.getElementById('nepalAchievement');
   const rangeIndex = (nepal.productSales || []).findIndex(item => item.product === 'Other / Range Value');
@@ -656,11 +538,15 @@ const fromInput = document.getElementById('dateFrom'), toInput = document.getEle
 fromInput.value = DATA.period.start; toInput.value = DATA.period.end;
 for (const input of [fromInput, toInput]) { input.min = DATA.period.start; input.max = DATA.period.end; }
 document.getElementById('sourceName').textContent = DATA.source;
-document.getElementById('uploadStatus').textContent = `Current source: ${DATA.source} · loaded ${DATA.loadedAt}`;
-document.getElementById('weeklyUploadStatus').textContent = DATA.weeklyPerformance?.available
+document.getElementById('sourceLoadedAt').textContent = `Latest workbook loaded: ${DATA.loadedAt}`;
+const uploadStatus = document.getElementById('uploadStatus');
+if (uploadStatus) uploadStatus.textContent = `Latest workbook: ${DATA.source} · uploaded ${DATA.loadedAt}`;
+const weeklyStatus = document.getElementById('weeklyUploadStatus');
+if (weeklyStatus) weeklyStatus.textContent = DATA.weeklyPerformance?.available
   ? `Current source: ${DATA.weeklyPerformance.source} · loaded ${DATA.weeklyPerformance.loadedAt}`
   : 'No weekly plan workbook is loaded.';
-document.getElementById('lastYearUploadStatus').textContent = DATA.lastYearData
+const lastYearStatus = document.getElementById('lastYearUploadStatus');
+if (lastYearStatus) lastYearStatus.textContent = DATA.lastYearData
   ? `Current source: ${DATA.lastYearData.source} · loaded ${DATA.lastYearData.loadedAt}`
   : DATA.lastYearError
     ? `Workbook unavailable: ${DATA.lastYearError}`
@@ -681,7 +567,8 @@ document.getElementById('downloadCsv').addEventListener('click', () => {
   const csv = [header,...rows.map(row=>fields.map(key=>row[key]||''))].map(line=>line.map(value=>'"'+String(value).replaceAll('"','""')+'"').join(',')).join('\r\n');
   const link=document.createElement('a');link.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));link.download='active-zero-billing-follow-up.csv';link.click();URL.revokeObjectURL(link.href);
 });
-document.getElementById('workbookFile').addEventListener('change', async event => {
+const workbookFile = document.getElementById('workbookFile');
+if (workbookFile) workbookFile.addEventListener('change', async event => {
   const file = event.target.files[0]; if (!file) return;
   const status = document.getElementById('uploadStatus'); status.textContent = `Uploading ${file.name}…`;
   const form = new FormData(); form.append('workbook', file);
@@ -694,7 +581,8 @@ document.getElementById('workbookFile').addEventListener('change', async event =
     status.textContent = error.message || 'Upload failed.'; status.classList.add('error');
   } finally { event.target.value = ''; }
 });
-document.getElementById('lastYearWorkbookFile').addEventListener('change', async event => {
+const lastYearWorkbookFile = document.getElementById('lastYearWorkbookFile');
+if (lastYearWorkbookFile) lastYearWorkbookFile.addEventListener('change', async event => {
   const file = event.target.files[0]; if (!file) return;
   const status = document.getElementById('lastYearUploadStatus');
   status.textContent = `Uploading ${file.name}…`;
@@ -710,7 +598,8 @@ document.getElementById('lastYearWorkbookFile').addEventListener('change', async
     status.classList.add('error');
   } finally { event.target.value = ''; }
 });
-document.getElementById('weeklyWorkbookFile').addEventListener('change', async event => {
+const weeklyWorkbookFile = document.getElementById('weeklyWorkbookFile');
+if (weeklyWorkbookFile) weeklyWorkbookFile.addEventListener('change', async event => {
   const file = event.target.files[0]; if (!file) return;
   const status = document.getElementById('weeklyUploadStatus'); status.textContent = `Uploading ${file.name}…`;
   status.classList.remove('error');

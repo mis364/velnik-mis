@@ -6,10 +6,12 @@
   <title>Velnik MIS | Sales Analysis</title>
   <link rel="stylesheet" href="/static/styles.css">
   <script id="report-data" type="application/json">__REPORT_DATA__</script>
+  <script src="/static/report-analysis.js" defer></script>
   <script src="/static/app.js" defer></script>
   <script src="/static/ai-chat.js" defer></script>
+  <script src="/static/language.js" defer></script>
 </head>
-<body>
+<body data-owner="__OWNER_SESSION__">
   <header class="topbar">
     <a class="brand" href="#top"><span class="brand-mark">V</span><span>VELNIK MIS</span></a>
     <nav aria-label="Main navigation">
@@ -24,8 +26,10 @@
       <a href="#products">Products</a>
       <a href="#distributors">Distributors</a>
       <a href="/stock">Stock report</a>
-      <a href="#recurring">Refresh</a>
+      <a href="#recurring">Daily upload</a>
+      __OWNER_NAV__
     </nav>
+    <button class="button language-toggle" id="pageLanguageToggle" type="button" aria-label="पेज की भाषा हिंदी में बदलें">हिन्दी</button>
     <div class="source-chip"><span class="live-dot" aria-hidden="true"></span><span id="sourceName">Workbook loaded</span></div>
   </header>
 
@@ -36,7 +40,17 @@
         <h1>Sales overview</h1>
         <p class="hero-copy">Daily movement, plan gaps, product mix, and distributors to follow up.</p>
       </div>
-      <div class="as-of"><span>REPORT PERIOD</span><strong id="periodLabel">—</strong></div>
+      <div class="as-of"><span>REPORT PERIOD</span><strong id="periodLabel">—</strong><small id="sourceLoadedAt">Latest workbook loaded: —</small></div>
+    </section>
+
+    <section class="section" id="recurring">
+      <div class="section-heading"><div><p class="kicker">DAILY WORKBOOK</p><h2>Upload today's sales workbook</h2><p class="muted">The latest uploaded workbook is shown automatically when you open this page. Upload today's .xlsx file to refresh the report.</p></div></div>
+      <!--OWNER-ONLY--><article class="refresh-panel">
+        <div><h3>Refresh from Excel</h3><p>Choose an .xlsx file with the <strong>Raw</strong> and <strong>SS to DB Sale</strong> sheets. The <strong>Without GST</strong> sheet adds plan-gap analysis.</p><p class="muted small">On Render's free service, uploaded files may be lost after a restart or redeploy. Check the workbook name and upload time below; download a backup before planned restarts.</p><p id="uploadStatus" class="upload-status" role="status">Latest workbook: —</p></div>
+        <label class="button primary upload-button" for="workbookFile">Choose workbook<input id="workbookFile" type="file" accept=".xlsx" hidden></label>
+      </article><!--/OWNER-ONLY-->
+      <!--GUEST-ONLY--><p class="muted small">Workbook uploads are managed by the owner. The report below uses the latest workbook currently available on the service.</p><!--/GUEST-ONLY-->
+      <div class="footnote" id="dateWarning"></div>
     </section>
 
     <section class="section" id="ai-analysis">
@@ -94,10 +108,11 @@
       <div class="section-heading">
         <div><p class="kicker">YEAR · COMPARISON</p><h2>Compare with last year</h2><p class="muted">Upload the separate prior-year sales workbook to compare matching calendar dates.</p></div>
       </div>
-      <article class="refresh-panel">
+      <!--OWNER-ONLY--><article class="refresh-panel">
         <div><h3>Last-year sales workbook</h3><p>Choose your FY 2025–26 sales workbook. This is stored separately and will not replace the current sales workbook.</p><p id="lastYearUploadStatus" class="upload-status" role="status">No last-year workbook uploaded.</p></div>
         <label class="button primary upload-button" for="lastYearWorkbookFile">Choose last-year workbook<input id="lastYearWorkbookFile" type="file" accept=".xlsx" hidden></label>
-      </article>
+      </article><!--/OWNER-ONLY-->
+      <!--GUEST-ONLY--><p class="muted small">Last-year workbooks are managed by the owner.</p><!--/GUEST-ONLY-->
       <article class="panel table-panel period-comparison-panel">
         <p id="yearComparisonStatus" class="muted small" aria-live="polite"></p>
         <div id="yearComparisonSummary" class="comparison-summary"></div>
@@ -150,11 +165,12 @@
         <div><p class="kicker">WEEKLY · STATE PERFORMANCE</p><h2>Week-wise performance</h2><p class="muted" id="weeklyCaption">Weekly plan and achievement by state from the planning workbook.</p></div>
         <span class="unit" id="weeklyPeriod">WEEK</span>
       </div>
-      <article class="refresh-panel weekly-upload-panel">
+      <!--OWNER-ONLY--><article class="refresh-panel weekly-upload-panel">
         <div><h3>Weekly plan workbook</h3><p>Upload an .xlsx workbook with <strong>State</strong>, <strong>Week Plan</strong>, <strong>Week Ach.</strong>, and <strong>Balance</strong> columns on the first sheet.</p><p id="weeklyUploadStatus" class="upload-status" role="status">Current source: —</p></div>
         <label class="button primary upload-button" for="weeklyWorkbookFile">Choose weekly plan<input id="weeklyWorkbookFile" type="file" accept=".xlsx" hidden></label>
-      </article>
-      <div id="weeklyEmpty" class="panel" hidden>No weekly plan is loaded. Upload the planning workbook to show week-wise performance.</div>
+      </article><!--/OWNER-ONLY-->
+      <!--GUEST-ONLY--><p class="muted small">Weekly plan workbooks are managed by the owner.</p><!--/GUEST-ONLY-->
+      <div id="weeklyEmpty" class="panel" hidden>No weekly plan is loaded.</div>
       <div id="weeklyContent" hidden>
         <div id="weeklyWarnings" class="quality-notes" aria-live="polite"></div>
         <div id="weeklyStats" class="stats"></div>
@@ -206,14 +222,6 @@
       </article>
     </section>
 
-    <section class="section" id="recurring">
-      <div class="section-heading"><div><p class="kicker">05 · RECURRING REPORT</p><h2>Upload and refresh</h2><p class="muted">A new workbook recalculates the whole page and is saved locally on this computer.</p></div></div>
-      <article class="refresh-panel">
-        <div><h3>Refresh from Excel</h3><p>Upload an <strong>.xlsx</strong> file with the <strong>Raw</strong> and <strong>SS to DB Sale</strong> sheets. The <strong>Without GST</strong> sheet adds plan-gap analysis.</p><p class="muted small">The app runs only while its local server is open. Scheduled email or updates while the computer is off need a separate scheduler/host.</p><p id="uploadStatus" class="upload-status" role="status">Current source: —</p></div>
-        <label class="button primary upload-button" for="workbookFile">Choose workbook<input id="workbookFile" type="file" accept=".xlsx" hidden></label>
-      </article>
-      <div class="footnote" id="dateWarning"></div>
-    </section>
     <footer>Sales values are in lakh. “With tax” and “Without GST” are separate source measures. This report is for review; confirm unusual values with the source team.</footer>
   </main>
 </body>
