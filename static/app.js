@@ -228,7 +228,7 @@ function downloadActionReport() {
       ]);
     }
   }
-  const csv = rows.map(line => line.map(value => `"${String(value ?? '').replaceAll('"', '""')}"`).join(',')).join('\r\n');
+  const csv = SalesMISCsv.serialize(rows);
   const link = document.createElement('a');
   link.href = URL.createObjectURL(new Blob(['\uFEFF', csv], { type: 'text/csv;charset=utf-8' }));
   link.download = `sales-action-report-${fromTo().from}-to-${fromTo().to}.csv`;
@@ -564,7 +564,7 @@ document.getElementById('nextPage').addEventListener('click', () => { pageNumber
 document.getElementById('downloadCsv').addEventListener('click', () => {
   const rows = filteredDistributors(), header = ['Distributor','DB code','State / region','Sales representative','Area manager','Super stockist'];
   const fields = ['name','code','state','salesRep','asm','superStockist'];
-  const csv = [header,...rows.map(row=>fields.map(key=>row[key]||''))].map(line=>line.map(value=>'"'+String(value).replaceAll('"','""')+'"').join(',')).join('\r\n');
+  const csv = SalesMISCsv.serialize([header, ...rows.map(row => fields.map(key => row[key] || ''))]);
   const link=document.createElement('a');link.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));link.download='active-zero-billing-follow-up.csv';link.click();URL.revokeObjectURL(link.href);
 });
 const workbookFile = document.getElementById('workbookFile');

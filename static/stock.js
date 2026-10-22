@@ -82,13 +82,12 @@ function populateReport() {
     const columns = state ? [state] : stateColumns;
     const header = ['Product', 'Particulars', ...columns, 'Grand Total'];
     const rows = DATA.stateProductRows || [];
-    const csv = [header, ...rows.map(row => [
+    const csv = SalesMISCsv.serialize([header, ...rows.map(row => [
       row.item,
       row.particulars,
       ...columns.map(column => row.values?.[column] ?? ''),
       row.grandTotal ?? ''
-    ])]
-      .map(line => line.map(value => `"${String(value).replaceAll('"', '""')}"`).join(',')).join('\r\n');
+    ])]);
     const link = document.createElement('a');
     link.href = URL.createObjectURL(new Blob(['\uFEFF', csv], { type: 'text/csv;charset=utf-8' }));
     link.download = state ? `state-wise-stock-${state.replace(/[^a-z0-9_-]/gi, '-')}.csv` : 'state-wise-stock-all-states.csv';
