@@ -28,6 +28,7 @@ except ModuleNotFoundError as exc:
 
 from weekly import build_weekly_performance
 from workbook_utils import clean_text, number
+from billing_efficiency import build_billing_efficiency_report
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -43,6 +44,8 @@ WEEKLY_WORKBOOK_PATH = DATA_DIR / "weekly_plan.xlsx"
 WEEKLY_META_PATH = DATA_DIR / "weekly_source.json"
 LAST_YEAR_WORKBOOK_PATH = DATA_DIR / "last_year_sales.xlsx"
 LAST_YEAR_META_PATH = DATA_DIR / "last_year_source.json"
+BILLING_EFFICIENCY_WORKBOOK_PATH = DATA_DIR / "billing_efficiency_latest.xlsm"
+BILLING_EFFICIENCY_META_PATH = DATA_DIR / "billing_efficiency_source.json"
 MAX_UPLOAD_BYTES = 50 * 1024 * 1024
 MAX_BACKUP_BYTES = 250 * 1024 * 1024
 BACKUP_FILE_NAMES = (
@@ -55,6 +58,8 @@ BACKUP_FILE_NAMES = (
     "weekly_source.json",
     "last_year_sales.xlsx",
     "last_year_source.json",
+    "billing_efficiency_latest.xlsm",
+    "billing_efficiency_source.json",
 )
 SESSION_COOKIE_NAME = "sales_mis_session"
 SESSION_TTL_SECONDS = 12 * 60 * 60
@@ -106,6 +111,7 @@ _CACHE = {"mtime": None, "payload": None}
 _STOCK_CACHE = {"mtime": None, "payload": None}
 _WEEKLY_CACHE = {"mtime": None, "payload": None}
 _LAST_YEAR_CACHE = {"mtime": None, "payload": None}
+_BILLING_EFFICIENCY_CACHE = {"mtime": None, "payload": None}
 
 
 def build_analysis_context(scope, start_date=None, end_date=None):
@@ -1143,6 +1149,32 @@ def get_last_year_report():
         return payload
 
 
+def get_billing_efficiency_report():
+    if not BILLING_EFFICIENCY_WORKBOOK_PATH.exists():
+        return None
+    mtime = BILLING_EFFICIENCY_WORKBOOK_PATH.stat().st_mtime
+    with _CACHE_LOCK:
+        if (
+            _BILLING_EFFICIENCY_CACHE["payload"] is not None
+            and _BILLING_EFFICIENCY_CACHE["mtime"] == mtime
+        ):
+            return _BILLING_EFFICIENCY_CACHE["payload"]
+        try:
+            meta = json.loads(BILLING_EFFICIENCY_META_PATH.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            meta = {
+                "source_name": BILLING_EFFICIENCY_WORKBOOK_PATH.name,
+                "loaded_at": "Unknown",
+            }
+        payload = build_billing_efficiency_report(
+            BILLING_EFFICIENCY_WORKBOOK_PATH,
+            meta.get("source_name", BILLING_EFFICIENCY_WORKBOOK_PATH.name),
+            meta.get("loaded_at"),
+        )
+        _BILLING_EFFICIENCY_CACHE.update({"mtime": mtime, "payload": payload})
+        return payload
+
+
 def validate_workbook_bytes(contents):
     try:
         book = pd.ExcelFile(BytesIO(contents))
@@ -1176,6 +1208,21 @@ def validate_weekly_workbook_bytes(contents):
     if not book.sheet_names:
         raise ValueError("The weekly plan workbook has no worksheets.")
     build_weekly_performance(BytesIO(contents), "uploaded weekly plan", datetime.now().strftime("%Y-%m-%d %H:%M"))
+
+
+def validate_billing_efficiency_workbook_bytes(contents):
+    try:
+        build_billing_efficiency_report(
+            contents,
+            "uploaded billing efficiency workbook",
+            datetime.now().strftime("%Y-%m-%d %H:%M"),
+        )
+    except Exception as exc:
+        if isinstance(exc, ValueError):
+            raise
+        raise ValueError(
+            "I could not read that Excel file. Please choose a valid .xlsm or .xlsx billing workbook."
+        ) from exc
 
 
 class SalesMISHandler(BaseHTTPRequestHandler):
@@ -1312,7 +1359,7 @@ background:#174a38;color:white;font:inherit;font-weight:600;cursor:pointer}}
             self.send_header("Content-Length", "0")
             self.end_headers()
             return
-        if path in {"/", "/stock"}:
+        if path in {"/", "/stock", "/billing-efficiency"}:
             if not username or not password:
                 return self.send_bytes(
                     503,
@@ -1372,6 +1419,26 @@ background:#174a38;color:white;font:inherit;font-weight:600;cursor:pointer}}
                 return self.send_bytes(200, page.encode("utf-8"), "text/html; charset=utf-8")
             except Exception as exc:
                 body = ("<h1>Could not build the stock report</h1><p>" + str(exc) + "</p>").encode("utf-8")
+                return self.send_bytes(500, body, "text/html; charset=utf-8")
+        if path == "/billing-efficiency":
+            try:
+                payload = get_billing_efficiency_report() or {"available": False}
+                template = (TEMPLATE_DIR / "billing_efficiency.html").read_text(encoding="utf-8")
+                encoded = json.dumps(
+                    payload,
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                    allow_nan=False,
+                ).replace("</", "<\\/")
+                page = template.replace("__BILLING_DATA__", encoded)
+                page = self._render_owner_controls(page)
+                return self.send_bytes(200, page.encode("utf-8"), "text/html; charset=utf-8")
+            except Exception as exc:
+                body = (
+                    "<h1>Could not build the billing efficiency report</h1><p>"
+                    + str(exc)
+                    + "</p>"
+                ).encode("utf-8")
                 return self.send_bytes(500, body, "text/html; charset=utf-8")
         if path != "/":
             return self.send_bytes(404, b"Not found", "text/plain; charset=utf-8")
@@ -1489,6 +1556,7 @@ background:#174a38;color:white;font:inherit;font-weight:600;cursor:pointer}}
             "/stock-upload",
             "/weekly-upload",
             "/last-year-upload",
+            "/billing-efficiency-upload",
             "/ai-chat",
         }
         if request_path in owner_routes:
@@ -1598,11 +1666,18 @@ background:#174a38;color:white;font:inherit;font-weight:600;cursor:pointer}}
                 response = json.dumps({"ok": False, "error": "Nepal values could not be saved: " + str(exc)}).encode("utf-8")
                 return self.send_bytes(500, response, "application/json; charset=utf-8")
 
-        if request_path not in {"/upload", "/stock-upload", "/weekly-upload", "/last-year-upload"}:
+        if request_path not in {
+            "/upload",
+            "/stock-upload",
+            "/weekly-upload",
+            "/last-year-upload",
+            "/billing-efficiency-upload",
+        }:
             return self.send_bytes(404, b"Not found", "text/plain; charset=utf-8")
         is_stock_upload = request_path == "/stock-upload"
         is_weekly_upload = request_path == "/weekly-upload"
         is_last_year_upload = request_path == "/last-year-upload"
+        is_billing_efficiency_upload = request_path == "/billing-efficiency-upload"
         try:
             content_length = int(self.headers.get("Content-Length", "0"))
             if content_length <= 0 or content_length > MAX_UPLOAD_BYTES:
@@ -1618,12 +1693,22 @@ background:#174a38;color:white;font:inherit;font-weight:600;cursor:pointer}}
             if upload is None:
                 raise ValueError("No workbook was included in the upload.")
             filename = Path(upload.get_filename() or "").name
-            if not filename.lower().endswith(".xlsx"):
-                raise ValueError("Please upload an .xlsx file.")
+            allowed_extensions = (".xlsm", ".xlsx") if is_billing_efficiency_upload else (".xlsx",)
+            if not filename.lower().endswith(allowed_extensions):
+                raise ValueError(
+                    "Please upload an .xlsm or .xlsx billing workbook."
+                    if is_billing_efficiency_upload
+                    else "Please upload an .xlsx file."
+                )
             contents = upload.get_payload(decode=True) or b""
             if not contents:
                 raise ValueError("The selected file is empty.")
-            if is_last_year_upload:
+            if is_billing_efficiency_upload:
+                validate_billing_efficiency_workbook_bytes(contents)
+                replace_workbook(contents, BILLING_EFFICIENCY_WORKBOOK_PATH)
+                meta_path = BILLING_EFFICIENCY_META_PATH
+                cache = _BILLING_EFFICIENCY_CACHE
+            elif is_last_year_upload:
                 validate_workbook_bytes(contents)
                 replace_workbook(contents, LAST_YEAR_WORKBOOK_PATH)
                 meta_path = LAST_YEAR_META_PATH
@@ -1651,7 +1736,12 @@ background:#174a38;color:white;font:inherit;font-weight:600;cursor:pointer}}
                 "ok": True,
                 "filename": filename,
                 "loadedAt": loaded_at,
-                "reportUrl": "/stock" if is_stock_upload else "/",
+                "reportUrl": (
+                    "/billing-efficiency"
+                    if is_billing_efficiency_upload
+                    else "/stock" if is_stock_upload
+                    else "/"
+                ),
             }).encode("utf-8")
             return self.send_bytes(200, response, "application/json; charset=utf-8")
         except ValueError as exc:

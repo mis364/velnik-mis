@@ -1,5 +1,6 @@
 import json
 import http.client
+from io import BytesIO
 import os
 import tempfile
 import threading
@@ -11,6 +12,115 @@ from unittest.mock import patch
 import pandas as pd
 
 import app
+from billing_efficiency import build_billing_efficiency_report
+
+
+class BillingEfficiencyReportTests(unittest.TestCase):
+    def create_workbook(self, rows):
+        temporary = tempfile.TemporaryFile()
+        with pd.ExcelWriter(temporary, engine="openpyxl") as writer:
+            pd.DataFrame(rows).to_excel(
+                writer,
+                sheet_name="SS to DB Sale",
+                index=False,
+                startrow=1,
+            )
+        temporary.seek(0)
+        return temporary
+
+    def test_builds_monthly_billing_coverage_and_flags_duplicates(self):
+        rows = [
+            {
+                "Month": "Apr",
+                "DB Code": "DB-1",
+                "DB Status": "Active",
+                "Zone": "North",
+                "State": "State A",
+                "SS Name": "SS A",
+                "DB Name": "Distributor 1",
+                "Res SR/SO Name": "Rep A",
+                "Value In Lacs": 2,
+                "Babelois Diaper": 1,
+            },
+            {
+                "Month": "Apr",
+                "DB Code": "DB-2",
+                "DB Status": "ACTIVE",
+                "Zone": "North",
+                "State": "State A",
+                "SS Name": "SS A",
+                "DB Name": "Distributor 2",
+                "Res SR/SO Name": "Rep A",
+                "Value In Lacs": 0,
+                "Babelois Diaper": 0,
+            },
+            {
+                "Month": "Apr",
+                "DB Code": "DB-2",
+                "DB Status": "Active",
+                "Zone": "North",
+                "State": "State A",
+                "SS Name": "SS A",
+                "DB Name": "Distributor 2",
+                "Res SR/SO Name": "Rep A",
+                "Value In Lacs": 0,
+                "Babelois Diaper": 0,
+            },
+            {
+                "Month": "Apr",
+                "DB Code": "DB-3",
+                "DB Status": "Inactive",
+                "Zone": "South",
+                "State": "State B",
+                "SS Name": "SS B",
+                "DB Name": "Distributor 3",
+                "Res SR/SO Name": "Rep B",
+                "Value In Lacs": 5,
+                "Babelois Diaper": 2,
+            },
+            {
+                "Month": "May",
+                "DB Code": "DB-4",
+                "DB Status": "Active",
+                "Zone": "South",
+                "State": "State B",
+                "SS Name": "SS B",
+                "DB Name": "Distributor 4",
+                "Res SR/SO Name": "Rep B",
+                "Value In Lacs": -1,
+                "Babelois Diaper": 1,
+            },
+        ]
+        workbook = self.create_workbook(rows)
+        try:
+            report = build_billing_efficiency_report(workbook)
+        finally:
+            workbook.close()
+
+        self.assertEqual(report["months"], ["Apr", "May"])
+        self.assertEqual(report["monthly"][0]["salesLakh"], 7)
+        self.assertEqual(report["monthly"][0]["activeDbCount"], 2)
+        self.assertEqual(report["monthly"][0]["billedActiveDbCount"], 1)
+        self.assertEqual(report["monthly"][0]["zeroBillingActiveDbCount"], 1)
+        self.assertEqual(report["monthly"][0]["efficiencyPct"], 50)
+        self.assertEqual(report["quality"]["duplicateDistributorMonthRows"], 1)
+        self.assertEqual(
+            [(row["month"], row["dbCode"]) for row in report["zeroBilling"]],
+            [("Apr", "DB-2"), ("May", "DB-4")],
+        )
+        product = next(row for row in report["products"] if row["product"] == "Babelois Diaper")
+        self.assertEqual(product["billedDistributors"], 1)
+
+    def test_requires_expected_sheet_and_columns(self):
+        workbook = tempfile.TemporaryFile()
+        with pd.ExcelWriter(workbook, engine="openpyxl") as writer:
+            pd.DataFrame({"Month": ["Apr"]}).to_excel(writer, sheet_name="Other", index=False)
+        workbook.seek(0)
+        try:
+            with self.assertRaisesRegex(ValueError, "SS to DB Sale"):
+                build_billing_efficiency_report(workbook)
+        finally:
+            workbook.close()
 
 
 class AuthenticationTests(unittest.TestCase):
@@ -48,12 +158,12 @@ class AuthenticationTests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertIn(b"--navy", body)
 
-        for path in ("/", "/stock"):
+        for path in ("/", "/stock", "/billing-efficiency"):
             status, headers, _ = self.request("GET", path)
             self.assertEqual(status, 303, path)
             self.assertEqual(dict(headers)["Location"], "/login")
 
-        for path in ("/upload", "/stock-upload", "/weekly-upload", "/last-year-upload", "/nepal-manual", "/ai-chat"):
+        for path in ("/upload", "/stock-upload", "/weekly-upload", "/last-year-upload", "/billing-efficiency-upload", "/nepal-manual", "/ai-chat"):
             status, _, body = self.request("POST", path)
             self.assertEqual(status, 401, path)
             self.assertIn(b"Sign in is required", body)
@@ -125,11 +235,79 @@ class AuthenticationTests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertIn(b'id="stock-upload"', body)
 
+        with patch.object(app, "get_billing_efficiency_report", return_value={"available": False}):
+            status, _, body = self.request(
+                "GET",
+                "/billing-efficiency",
+                headers={"Cookie": cookie.split(";", 1)[0]},
+            )
+        self.assertEqual(status, 200)
+        self.assertIn(b'id="billing-upload"', body)
+
     def test_missing_credentials_fail_closed(self):
         with patch.dict(os.environ, {"SALES_MIS_USERNAME": "", "SALES_MIS_PASSWORD": ""}):
             status, _, body = self.request("GET", "/login")
         self.assertEqual(status, 503)
         self.assertIn(b"Owner sign-in is not configured", body)
+
+    def test_billing_efficiency_upload_accepts_macro_workbook_separately(self):
+        workbook_bytes = BytesIO()
+        frame = pd.DataFrame([{
+            "Month": "Apr",
+            "DB Code": "DB-1",
+            "DB Status": "Active",
+            "Zone": "North",
+            "State": "State A",
+            "SS Name": "SS A",
+            "DB Name": "Distributor 1",
+            "Res SR/SO Name": "Rep A",
+            "Value In Lacs": 1,
+            "Product A": 1,
+        }])
+        with pd.ExcelWriter(workbook_bytes, engine="openpyxl") as writer:
+            frame.to_excel(writer, sheet_name="SS to DB Sale", index=False, startrow=1)
+        contents = workbook_bytes.getvalue()
+
+        _, login_headers, _ = self.request(
+            "POST",
+            "/login",
+            body="username=owner&password=test-password",
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+        )
+        cookie = dict(login_headers)["Set-Cookie"].split(";", 1)[0]
+        boundary = "billing-upload-test"
+        body = (
+            f"--{boundary}\r\n"
+            'Content-Disposition: form-data; name="workbook"; filename="billing.xlsm"\r\n'
+            "Content-Type: application/vnd.ms-excel.sheet.macroEnabled.12\r\n\r\n"
+        ).encode("utf-8") + contents + f"\r\n--{boundary}--\r\n".encode("utf-8")
+
+        with tempfile.TemporaryDirectory() as directory:
+            billing_path = Path(directory) / "billing_efficiency_latest.xlsm"
+            metadata_path = Path(directory) / "billing_efficiency_source.json"
+            sales_path = Path(directory) / "latest.xlsx"
+            sales_path.write_bytes(b"sales workbook")
+            with (
+                patch.object(app, "BILLING_EFFICIENCY_WORKBOOK_PATH", billing_path),
+                patch.object(app, "BILLING_EFFICIENCY_META_PATH", metadata_path),
+            ):
+                status, _, response_body = self.request(
+                    "POST",
+                    "/billing-efficiency-upload",
+                    body=body,
+                    headers={
+                        "Cookie": cookie,
+                        "Content-Type": f"multipart/form-data; boundary={boundary}",
+                    },
+                )
+            self.assertEqual(status, 200)
+            self.assertEqual(json.loads(response_body)["reportUrl"], "/billing-efficiency")
+            self.assertEqual(billing_path.read_bytes(), contents)
+            self.assertEqual(sales_path.read_bytes(), b"sales workbook")
+            self.assertEqual(
+                json.loads(metadata_path.read_text(encoding="utf-8"))["source_name"],
+                "billing.xlsm",
+            )
 
     def test_backup_download_requires_owner_and_contains_only_report_files(self):
         with tempfile.TemporaryDirectory() as directory:

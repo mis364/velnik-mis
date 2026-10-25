@@ -12,6 +12,12 @@
     Products: 'उत्पाद',
     Distributors: 'वितरक',
     'Stock report': 'स्टॉक रिपोर्ट',
+    'Billing efficiency': 'बिलिंग दक्षता',
+    Summary: 'सारांश',
+    'Monthly trend': 'मासिक रुझान',
+    'State / zone': 'राज्य / ज़ोन',
+    Representatives: 'प्रतिनिधि',
+    'Zero billing': 'शून्य बिलिंग',
     'Daily upload': 'दैनिक अपलोड',
     'Download backup': 'बैकअप डाउनलोड करें',
     'Sign out': 'साइन आउट',
@@ -20,6 +26,54 @@
     'VELNIK MIS': 'VELNIK MIS',
     'Workbook loaded': 'वर्कबुक लोड हुई',
     'Stock workbook not loaded': 'स्टॉक वर्कबुक लोड नहीं हुई',
+    'Billing workbook not loaded': 'बिलिंग वर्कबुक लोड नहीं हुई',
+    'DISTRIBUTOR · BILLING MIS': 'वितरक · बिलिंग MIS',
+    'Monthly billing coverage, state and representative performance, product reach, and active distributors to follow up.': 'मासिक बिलिंग कवरेज, राज्य और प्रतिनिधि प्रदर्शन, उत्पाद पहुँच और अनुवर्ती कार्रवाई वाले सक्रिय वितरक।',
+    'FINANCIAL YEAR': 'वित्तीय वर्ष',
+    'Upload billing efficiency workbook': 'बिलिंग दक्षता वर्कबुक अपलोड करें',
+    'Choose the .xlsm or .xlsx workbook containing an': '.xlsm या .xlsx वर्कबुक चुनें जिसमें',
+    'sheet with headers on row 2.': 'शीट की हेडर पंक्ति 2 पर हो।',
+    'This workbook is stored separately from sales and stock data. Macros are not run.': 'यह वर्कबुक बिक्री और स्टॉक डेटा से अलग रखी जाती है। मैक्रो नहीं चलाए जाते।',
+    'Current source: —': 'वर्तमान स्रोत: —',
+    'Choose billing workbook': 'बिलिंग वर्कबुक चुनें',
+    'Billing efficiency workbook uploads are managed by the owner.': 'बिलिंग दक्षता वर्कबुक अपलोड का प्रबंधन मालिक करता है।',
+    'Upload a billing efficiency workbook to build this report': 'यह रिपोर्ट बनाने के लिए बिलिंग दक्षता वर्कबुक अपलोड करें',
+    'The owner can upload the separate billing workbook. Existing sales and stock reports will not be changed.': 'मालिक अलग बिलिंग वर्कबुक अपलोड कर सकता है। मौजूदा बिक्री और स्टॉक रिपोर्ट नहीं बदलेंगी।',
+    Month: 'महीना',
+    'Billing coverage by month': 'महीने के अनुसार बिलिंग कवरेज',
+    'Efficiency is active distributors with positive Value In Lacs divided by active distributor codes.': 'दक्षता = सकारात्मक Value In Lacs वाले सक्रिय वितरक ÷ सक्रिय वितरक कोड।',
+    'Sales (lakh)': 'बिक्री (लाख)',
+    'Active DBs': 'सक्रिय DB',
+    'Billed active DBs': 'बिलिंग वाले सक्रिय DB',
+    'Active zero billing': 'शून्य बिलिंग वाले सक्रिय DB',
+    Efficiency: 'दक्षता',
+    'Selected month breakdown.': 'चयनित महीने का विवरण।',
+    'Ranked by sales value': 'बिक्री राशि के अनुसार क्रमबद्ध',
+    Zone: 'ज़ोन',
+    'FIELD TEAM': 'फील्ड टीम',
+    'Representative performance': 'प्रतिनिधि प्रदर्शन',
+    'Based on the workbook’s Res SR/SO Name field for the selected month.': 'चयनित महीने के लिए वर्कबुक के Res SR/SO Name फ़ील्ड पर आधारित।',
+    Representative: 'प्रतिनिधि',
+    'Zero billing DBs': 'शून्य बिलिंग वाले DB',
+    'PRODUCT REACH': 'उत्पाद पहुँच',
+    'Product billing coverage': 'उत्पाद बिलिंग कवरेज',
+    'Counts active distributors with a positive value in each product column. Values themselves are not shown because the workbook does not specify their unit.': 'हर उत्पाद कॉलम में सकारात्मक मान वाले सक्रिय वितरकों की संख्या। मान की इकाई वर्कबुक में नहीं दी गई, इसलिए मान नहीं दिखाए गए।',
+    Product: 'उत्पाद',
+    'Active DBs billed': 'बिलिंग वाले सक्रिय DB',
+    'Active DB coverage': 'सक्रिय DB कवरेज',
+    'Active distributors without positive billing': 'सकारात्मक बिलिंग के बिना सक्रिय वितरक',
+    'Confirm the selected month’s zero or negative net billing before follow-up.': 'अनुवर्ती कार्रवाई से पहले चयनित महीने की शून्य या ऋणात्मक शुद्ध बिलिंग की पुष्टि करें।',
+    'Download zero-billing CSV': 'शून्य-बिलिंग CSV डाउनलोड करें',
+    'Search name, code, state, or representative': 'नाम, कोड, राज्य या प्रतिनिधि खोजें',
+    'Type to search': 'खोजने के लिए लिखें',
+    'All states / regions': 'सभी राज्य / क्षेत्र',
+    'DB code': 'DB कोड',
+    Distributor: 'वितरक',
+    'Super stockist': 'सुपर स्टॉकिस्ट',
+    Previous: 'पिछला',
+    Next: 'अगला',
+    'ASD and ASDF are present in the source workbook but are not interpreted because their meanings are not defined. Product coverage is based only on positive product-column values. Duplicate distributor-month rows are flagged; sales values from duplicate rows are included in totals.': 'स्रोत वर्कबुक में ASD और ASDF हैं, पर अर्थ स्पष्ट नहीं होने के कारण उनकी व्याख्या नहीं की गई। उत्पाद कवरेज केवल सकारात्मक उत्पाद-कॉलम मानों पर आधारित है। डुप्लिकेट वितरक-महीना पंक्तियाँ चिह्नित हैं; उनकी बिक्री राशि कुल में शामिल है।',
+    'Billing analysis is calculated from the uploaded workbook. Verify figures and distributor status against the source before taking action.': 'बिलिंग विश्लेषण अपलोड की गई वर्कबुक से निकाला गया है। कार्रवाई से पहले आँकड़ों और वितरक स्थिति की स्रोत से पुष्टि करें।',
     'REPORT PERIOD': 'रिपोर्ट अवधि',
     'Latest workbook loaded: —': 'नवीनतम वर्कबुक लोड: —',
     'Latest workbook: —': 'नवीनतम वर्कबुक: —',
@@ -402,10 +456,18 @@
     document.title = language === 'hi'
       ? (location.pathname === '/login'
         ? 'साइन इन | Velnik MIS'
-        : document.getElementById('report-data') ? 'वेल्निक MIS | बिक्री विश्लेषण' : 'वेल्निक MIS | स्टॉक रिपोर्ट')
+        : document.getElementById('report-data')
+          ? 'वेल्निक MIS | बिक्री विश्लेषण'
+          : document.getElementById('billing-data')
+            ? 'वेल्निक MIS | बिलिंग दक्षता'
+            : 'वेल्निक MIS | स्टॉक रिपोर्ट')
       : (location.pathname === '/login'
         ? 'Sign in | Velnik MIS'
-        : document.getElementById('report-data') ? 'Velnik MIS | Sales Analysis' : 'Velnik MIS | Stock Report');
+        : document.getElementById('report-data')
+          ? 'Velnik MIS | Sales Analysis'
+          : document.getElementById('billing-data')
+            ? 'Velnik MIS | Billing Efficiency'
+            : 'Velnik MIS | Stock Report');
     document.querySelectorAll('#pageLanguageToggle').forEach(button => {
       button.textContent = language === 'hi' ? 'English' : 'हिन्दी';
       button.setAttribute('aria-label', language === 'hi' ? 'Switch page language to English' : 'पेज की भाषा हिंदी में बदलें');

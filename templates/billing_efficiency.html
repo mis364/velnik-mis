@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Velnik MIS | Billing Efficiency</title>
+  <link rel="stylesheet" href="/static/styles.css">
+  <script id="billing-data" type="application/json">__BILLING_DATA__</script>
+  <script src="/static/csv-utils.js" defer></script>
+  <script src="/static/billing-efficiency.js" defer></script>
+  <script src="/static/language.js" defer></script>
+</head>
+<body data-owner="__OWNER_SESSION__">
+  <header class="topbar">
+    <a class="brand" href="/"><span class="brand-mark">V</span><span>VELNIK MIS</span></a>
+    <nav aria-label="Main navigation">
+      <a href="/">Sales report</a>
+      <a href="/stock">Stock report</a>
+      <a href="#billing-summary">Summary</a>
+      <a href="#monthly-trend">Monthly trend</a>
+      <a href="#billing-states">State / zone</a>
+      <a href="#billing-team">Representatives</a>
+      <a href="#billing-products">Products</a>
+      <a href="#zero-billing">Zero billing</a>
+      __OWNER_NAV__
+    </nav>
+    <button class="button language-toggle" id="pageLanguageToggle" type="button" aria-label="पेज की भाषा हिंदी में बदलें">हिन्दी</button>
+    <div class="source-chip"><span class="live-dot" aria-hidden="true"></span><span id="billingSource">Billing workbook not loaded</span></div>
+  </header>
+
+  <main class="page" id="top">
+    <section class="hero">
+      <div>
+        <p class="kicker">DISTRIBUTOR · BILLING MIS</p>
+        <h1>Billing efficiency</h1>
+        <p class="hero-copy">Monthly billing coverage, state and representative performance, product reach, and active distributors to follow up.</p>
+      </div>
+      <div class="as-of"><span>FINANCIAL YEAR</span><strong>Apr 2026 – Mar 2027</strong><small id="billingLoadedAt">Latest workbook loaded: —</small></div>
+    </section>
+
+    <!--OWNER-ONLY--><section class="section" id="billing-upload">
+      <article class="refresh-panel">
+        <div>
+          <h3>Upload billing efficiency workbook</h3>
+          <p>Choose the .xlsm or .xlsx workbook containing an <strong>SS to DB Sale</strong> sheet with headers on row 2.</p>
+          <p class="muted small">This workbook is stored separately from sales and stock data. Macros are not run.</p>
+          <p id="billingUploadStatus" class="upload-status" role="status">Current source: —</p>
+        </div>
+        <label class="button primary upload-button" for="billingWorkbookFile">Choose billing workbook<input id="billingWorkbookFile" type="file" accept=".xlsm,.xlsx" hidden></label>
+      </article>
+    </section><!--/OWNER-ONLY-->
+    <!--GUEST-ONLY--><p class="muted small">Billing efficiency workbook uploads are managed by the owner.</p><!--/GUEST-ONLY-->
+
+    <div id="billingEmpty" class="panel stock-empty" hidden>
+      <h2>Upload a billing efficiency workbook to build this report</h2>
+      <p class="muted">The owner can upload the separate billing workbook. Existing sales and stock reports will not be changed.</p>
+    </div>
+
+    <div id="billingContent" hidden>
+      <section class="section" id="billing-summary">
+        <div class="table-tools">
+          <label>Month<select id="billingMonthFilter"></select></label>
+        </div>
+        <div class="stats" id="billingStats" aria-label="Billing efficiency summary"></div>
+      </section>
+
+      <section class="section" id="monthly-trend">
+        <div class="section-heading"><div><p class="kicker">01 · MONTHLY TREND</p><h2>Billing coverage by month</h2><p class="muted">Efficiency is active distributors with positive Value In Lacs divided by active distributor codes.</p></div><span class="unit">LAKH · %</span></div>
+        <article class="panel table-panel">
+          <div class="table-scroll"><table><thead><tr><th>Month</th><th class="num">Sales (lakh)</th><th class="num">Active DBs</th><th class="num">Billed active DBs</th><th class="num">Active zero billing</th><th class="num">Efficiency</th></tr></thead><tbody id="billingMonthlyRows"></tbody></table></div>
+        </article>
+      </section>
+
+      <section class="section" id="billing-states">
+        <div class="section-heading"><div><p class="kicker">02 · TERRITORY</p><h2>State and zone performance</h2><p class="muted" id="billingTerritoryCaption">Selected month breakdown.</p></div><span class="unit">LAKH</span></div>
+        <div class="grid two">
+          <article class="panel table-panel"><div class="panel-heading"><div><h3>State / region</h3><p class="muted">Ranked by sales value</p></div></div><div class="table-scroll"><table><thead><tr><th>State / region</th><th class="num">Sales (lakh)</th><th class="num">Active DBs</th><th class="num">Billed DBs</th><th class="num">Efficiency</th></tr></thead><tbody id="billingStateRows"></tbody></table></div></article>
+          <article class="panel table-panel"><div class="panel-heading"><div><h3>Zone</h3><p class="muted">Ranked by sales value</p></div></div><div class="table-scroll"><table><thead><tr><th>Zone</th><th class="num">Sales (lakh)</th><th class="num">Active DBs</th><th class="num">Billed DBs</th><th class="num">Efficiency</th></tr></thead><tbody id="billingZoneRows"></tbody></table></div></article>
+        </div>
+      </section>
+
+      <section class="section" id="billing-team">
+        <div class="section-heading"><div><p class="kicker">03 · FIELD TEAM</p><h2>Representative performance</h2><p class="muted">Based on the workbook’s Res SR/SO Name field for the selected month.</p></div></div>
+        <article class="panel table-panel"><div class="table-scroll"><table><thead><tr><th>Representative</th><th class="num">Sales (lakh)</th><th class="num">Active DBs</th><th class="num">Billed DBs</th><th class="num">Zero billing DBs</th><th class="num">Efficiency</th></tr></thead><tbody id="billingRepRows"></tbody></table></div></article>
+      </section>
+
+      <section class="section" id="billing-products">
+        <div class="section-heading"><div><p class="kicker">04 · PRODUCT REACH</p><h2>Product billing coverage</h2><p class="muted">Counts active distributors with a positive value in each product column. Values themselves are not shown because the workbook does not specify their unit.</p></div></div>
+        <article class="panel table-panel"><div class="table-scroll"><table><thead><tr><th>Product</th><th class="num">Active DBs billed</th><th class="num">Active DB coverage</th></tr></thead><tbody id="billingProductRows"></tbody></table></div></article>
+      </section>
+
+      <section class="section" id="zero-billing">
+        <div class="section-heading"><div><p class="kicker">05 · FOLLOW UP</p><h2>Active distributors without positive billing</h2><p class="muted">Confirm the selected month's zero or negative net billing before follow-up.</p></div><button class="button" id="downloadZeroBilling" type="button">Download zero-billing CSV</button></div>
+        <article class="panel table-panel">
+          <div class="table-tools">
+            <label class="search-label">Search name, code, state, or representative<input id="zeroBillingSearch" type="search" placeholder="Type to search"></label>
+            <label>State / region<select id="zeroBillingStateFilter"><option value="">All states / regions</option></select></label>
+            <span class="status-pill" id="zeroBillingCount"></span>
+          </div>
+          <div class="table-scroll"><table><thead><tr><th>DB code</th><th>Distributor</th><th>State / region</th><th>Zone</th><th>Super stockist</th><th>Representative</th></tr></thead><tbody id="zeroBillingRows"></tbody></table></div>
+          <div class="table-footer"><span id="zeroBillingPageSummary" aria-live="polite"></span><div class="pagination"><button class="button" id="zeroBillingPrev" type="button">Previous</button><button class="button" id="zeroBillingNext" type="button">Next</button></div></div>
+        </article>
+      </section>
+
+      <p class="muted small" id="billingQuality"></p>
+      <p class="muted small">ASD and ASDF are present in the source workbook but are not interpreted because their meanings are not defined. Product coverage is based only on positive product-column values. Duplicate distributor-month rows are flagged; sales values from duplicate rows are included in totals.</p>
+    </div>
+    <footer>Billing analysis is calculated from the uploaded workbook. Verify figures and distributor status against the source before taking action.</footer>
+  </main>
+</body>
+</html>
