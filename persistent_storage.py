@@ -96,19 +96,35 @@ class GoogleDriveStorage:
     def __init__(self, service_account_json, folder_id, service=None):
         self.folder_id = folder_id
         if service is None:
+            import google.auth
             from google.oauth2 import service_account
             from googleapiclient.discovery import build
 
-            try:
-                service_account_info = json.loads(service_account_json)
-            except json.JSONDecodeError as exc:
-                raise RuntimeError("GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON is not valid JSON.") from exc
-            credentials = service_account.Credentials.from_service_account_info(
-                service_account_info,
-                scopes=["https://www.googleapis.com/auth/drive"],
-            )
+            if service_account_json:
+                try:
+                    service_account_info = json.loads(service_account_json)
+                except json.JSONDecodeError as exc:
+                    raise RuntimeError(
+                        "GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON is not valid JSON."
+                    ) from exc
+                credentials = service_account.Credentials.from_service_account_info(
+                    service_account_info,
+                    scopes=["https://www.googleapis.com/auth/drive"],
+                )
+            else:
+                credentials, _ = google.auth.default(
+                    scopes=["https://www.googleapis.com/auth/drive"]
+                )
             service = build("drive", "v3", credentials=credentials, cache_discovery=False)
         self.service = service
+        folder = self.service.files().get(
+            fileId=folder_id,
+            fields="id,mimeType,driveId",
+            supportsAllDrives=True,
+        ).execute()
+        if folder.get("mimeType") != "application/vnd.google-apps.folder" or not folder.get("driveId"):
+            raise RuntimeError("GOOGLE_DRIVE_FOLDER_ID must identify a folder in a Shared Drive.")
+        self.drive_id = folder["driveId"]
 
     @staticmethod
     def _safe_filename(filename):
@@ -125,6 +141,8 @@ class GoogleDriveStorage:
                 fields="nextPageToken, files(id, name)",
                 pageSize=1000,
                 pageToken=page_token,
+                corpora="drive",
+                driveId=self.drive_id,
                 supportsAllDrives=True,
                 includeItemsFromAllDrives=True,
             ).execute()
@@ -239,12 +257,8 @@ def from_environment():
         )
 
     if provider == "google_drive" or drive_configured:
-        configured = [bool(value) for value in drive_values.values()]
-        if not all(configured):
-            missing = [name for name, value in drive_values.items() if not value]
-            raise RuntimeError(
-                "Google Drive storage is partially configured; set: " + ", ".join(missing)
-            )
+        if not drive_values["GOOGLE_DRIVE_FOLDER_ID"]:
+            raise RuntimeError("Set GOOGLE_DRIVE_FOLDER_ID for Google Drive storage.")
         return GoogleDriveStorage(
             service_account_json=drive_values["GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON"],
             folder_id=drive_values["GOOGLE_DRIVE_FOLDER_ID"],

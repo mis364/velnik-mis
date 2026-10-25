@@ -56,6 +56,15 @@ class FakeDriveFiles:
         self.created_parents = []
         self.updated_ids = []
 
+    def get(self, fileId, **kwargs):
+        return FakeDriveRequest(
+            lambda: {
+                "id": fileId,
+                "mimeType": "application/vnd.google-apps.folder",
+                "driveId": "shared-drive-id",
+            }
+        )
+
     def list(self, **kwargs):
         return FakeDriveRequest(
             lambda: {
@@ -166,6 +175,23 @@ class PersistentObjectStorageTests(unittest.TestCase):
         storage = GoogleDriveStorage.__new__(GoogleDriveStorage)
         with self.assertRaisesRegex(RuntimeError, "not valid JSON"):
             storage.__init__("not-json", "shared-folder-id")
+
+    def test_requires_a_shared_drive_folder(self):
+        class MyDriveFiles(FakeDriveFiles):
+            def get(self, fileId, **kwargs):
+                return FakeDriveRequest(
+                    lambda: {
+                        "id": fileId,
+                        "mimeType": "application/vnd.google-apps.folder",
+                    }
+                )
+
+        class MyDriveService:
+            def files(self):
+                return MyDriveFiles()
+
+        with self.assertRaisesRegex(RuntimeError, "Shared Drive"):
+            GoogleDriveStorage("{}", "my-drive-folder", service=MyDriveService())
 
     def test_google_drive_creates_new_file_in_configured_shared_folder(self):
         service = FakeDriveService()

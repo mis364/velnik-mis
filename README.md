@@ -62,14 +62,46 @@ To restore a local installation, stop the server, extract the ZIP into the proje
 
 Render's free web-service filesystem is ephemeral. To keep uploaded workbooks and Nepal manual-entry data when the service restarts or redeploys, configure one of the supported external object-storage providers. The app supports Google Drive Shared Drives through a Google Cloud service account or Cloudflare R2 through S3-compatible credentials. Only configure one provider at a time.
 
+### Deploy the full app to Google Cloud Run
+
+The repository includes a Dockerfile for Cloud Run. Runtime workbook persistence uses a Google Drive Shared Drive and Cloud Run's attached service identity (Application Default Credentials), so no service-account private key needs to be stored in the image or Render environment.
+
+1. **Keep the current data safe.** Before migrating, sign in to the live app and download **Download backup**. Keep the ZIP private and encrypted.
+2. **Create a Google Cloud project.** In [Google Cloud Console](https://console.cloud.google.com/), create/select a project and attach a billing account. Enable **Cloud Run Admin API**, **Cloud Build API**, **Artifact Registry API**, and **Google Drive API**. Cloud Run may incur charges; configure a billing budget alert before production use.
+3. **Create the Drive folder before deploying.** Use an organization Google Workspace **Shared Drive**, create a new empty folder such as `velnik-mis-data`, and add the Cloud Run runtime service account (step 4) as **Content manager** on that Shared Drive. Copy the folder ID from its URL. The service account needs Drive membership because it reads and writes the uploaded business workbooks.
+4. **Create the Cloud Run service identity.** In Google Cloud Console, go to **IAM & Admin → Service Accounts → Create service account** and name it `velnik-mis-run`. It does not need broad project roles to read Drive; grant it access to the Shared Drive instead. Record its email address. When prompted to attach a service account in Cloud Run, choose this identity. (If deploying from CLI, the deployer must also have permission to attach it.)
+5. **Seed the Shared Drive before deploying.** Extract the backup ZIP on your computer and upload its report files into the new Shared Drive folder, keeping their original filenames, such as `latest.xlsx`, `source.json`, `stock_latest.xlsx`, `stock_source.json`, `weekly_plan.xlsx`, `weekly_source.json`, `last_year_sales.xlsx`, `last_year_source.json`, `billing_efficiency_latest.xlsm`, and `billing_efficiency_source.json`. Include `nepal_manual.json` if it exists. Keep this folder private and do not share it publicly. The container intentionally excludes the local `data/` directory; the app needs the backed-up `latest.xlsx` in Drive to start.
+6. **Create login secrets.** In **Security → Secret Manager**, create secrets named `SALES_MIS_USERNAME` and `SALES_MIS_PASSWORD` with the owner login values you want for this Cloud Run deployment. Grant the `velnik-mis-run` service account **Secret Manager Secret Accessor** for these two secrets. Do not put passwords in Git or into a command that you might save/share.
+7. **Deploy from Windows.** Install and initialize the [Google Cloud CLI](https://cloud.google.com/sdk/docs/install), open PowerShell in the repository root (the folder containing `Dockerfile`), and run:
+
+   ```powershell
+   gcloud init
+   gcloud config set project YOUR_PROJECT_ID
+   gcloud services enable run.googleapis.com cloudbuild.googleapis.com artifactregistry.googleapis.com drive.googleapis.com
+   gcloud run deploy velnik-mis `
+     --source . `
+     --region asia-south1 `
+     --service-account velnik-mis-run@YOUR_PROJECT_ID.iam.gserviceaccount.com `
+     --allow-unauthenticated `
+     --memory 1Gi `
+     --timeout 300 `
+     --set-env-vars "SALES_MIS_STORAGE_PROVIDER=google_drive,GOOGLE_DRIVE_FOLDER_ID=YOUR_SHARED_DRIVE_FOLDER_ID" `
+     --set-secrets "SALES_MIS_USERNAME=SALES_MIS_USERNAME:latest,SALES_MIS_PASSWORD=SALES_MIS_PASSWORD:latest"
+   ```
+
+   Replace both `YOUR_PROJECT_ID` and `YOUR_SHARED_DRIVE_FOLDER_ID`. The Cloud Run URL is printed when deployment completes. Public invocation only exposes the app's sign-in screen; report and upload endpoints still require the configured owner login.
+8. **Verify before relying on it.** Open the printed Cloud Run URL, sign in with the secrets from step 6, and check the report pages show **Persistent storage: connected**. Confirm all reports load from the Shared Drive. Upload a small update and verify it appears in Drive before considering migration complete. Keep the original backup and continue downloading encrypted backups regularly.
+
+On each Cloud Run start, known report files are restored from the Shared Drive. Future workbook uploads and Nepal manual changes are written there before upload success is reported. The project needs a current backup in Drive before its first start; deployment cannot recover files already lost from Render's temporary filesystem.
+
 #### Google Drive Shared Drive setup
 
 1. Before deploying the storage change, sign in to the live app and download a backup. Keep this archive encrypted and outside the repository.
-2. In [Google Cloud Console](https://console.cloud.google.com/), create/select a project, enable the **Google Drive API**, and create a service account. Create a JSON key and store it securely; do not commit it or share it in chat.
-3. In Google Drive, create or choose a folder inside your organization's **Shared Drive**. Add the service account's email address (shown in its Google Cloud account details) as a **Content manager** on the Shared Drive. Personal My Drive isn't supported by this service-account setup.
-4. Copy the folder ID from the folder URL. In the Render service's **Environment** settings, set `SALES_MIS_STORAGE_PROVIDER` to `google_drive`, `GOOGLE_DRIVE_FOLDER_ID` to the folder ID, and `GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON` to the entire contents of the service account JSON key file. Keep the JSON private. Clear any old `SALES_MIS_STORAGE_*` R2 credentials so only one provider is configured.
-5. Save the environment variables and let Render redeploy. At startup the app restores known report files from the Drive folder and seeds missing objects from local data. Future workbook uploads and Nepal manual changes are written to Drive before the app confirms success. A partially configured provider prevents the app from starting instead of silently claiming uploads are persistent.
-6. Sign in, confirm the pages show **Persistent storage: connected**, and upload every current workbook from the backup once: sales, stock, weekly plan, prior-year sales, and billing efficiency. Re-enter any Nepal manual figures if needed. Keep downloading encrypted backups regularly.
+2. In [Google Cloud Console](https://console.cloud.google.com/), create/select a project and enable the **Google Drive API**. For Cloud Run, use its attached service identity as described above; a JSON key is only needed for another hosting provider without Google Application Default Credentials.
+3. In Google Drive, create or choose a folder inside your organization's **Shared Drive**. Add the runtime service account's email as a **Content manager** on the Shared Drive. Personal My Drive isn't supported by this service-account setup.
+4. Set `SALES_MIS_STORAGE_PROVIDER=google_drive` and `GOOGLE_DRIVE_FOLDER_ID` to the Shared Drive folder ID. On Cloud Run, the attached service identity authenticates through Application Default Credentials. For another host, set `GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON` to its service-account JSON key and keep the JSON private.
+5. Before first startup, place the current workbooks in the Shared Drive folder with the filenames used in `data/`. At startup the app restores known report files from the Drive folder. Future workbook uploads and Nepal manual changes are written to Drive before the app confirms success.
+6. Sign in, confirm the pages show **Persistent storage: connected**, and keep downloading encrypted backups regularly.
 
 #### Cloudflare R2 setup
 
