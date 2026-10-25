@@ -27,6 +27,8 @@
     'Workbook loaded': 'वर्कबुक लोड हुई',
     'Stock workbook not loaded': 'स्टॉक वर्कबुक लोड नहीं हुई',
     'Billing workbook not loaded': 'बिलिंग वर्कबुक लोड नहीं हुई',
+    'Persistent storage: connected': 'स्थायी स्टोरेज: कनेक्ट है',
+    'Persistent storage not configured — uploads may be lost after restart.': 'स्थायी स्टोरेज कॉन्फ़िगर नहीं है — रीस्टार्ट के बाद अपलोड खो सकते हैं।',
     'DISTRIBUTOR · BILLING MIS': 'वितरक · बिलिंग MIS',
     'Monthly billing coverage, state and representative performance, product reach, and active distributors to follow up.': 'मासिक बिलिंग कवरेज, राज्य और प्रतिनिधि प्रदर्शन, उत्पाद पहुँच और अनुवर्ती कार्रवाई वाले सक्रिय वितरक।',
     'FINANCIAL YEAR': 'वित्तीय वर्ष',

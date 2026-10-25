@@ -29,6 +29,7 @@ except ModuleNotFoundError as exc:
 from weekly import build_weekly_performance
 from workbook_utils import clean_text, number
 from billing_efficiency import build_billing_efficiency_report
+from persistent_storage import PersistentObjectStorage
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -112,6 +113,38 @@ _STOCK_CACHE = {"mtime": None, "payload": None}
 _WEEKLY_CACHE = {"mtime": None, "payload": None}
 _LAST_YEAR_CACHE = {"mtime": None, "payload": None}
 _BILLING_EFFICIENCY_CACHE = {"mtime": None, "payload": None}
+PERSISTENT_STORAGE = PersistentObjectStorage.from_environment()
+
+
+def persist_data_file(path, contents):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary_path = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="wb",
+            dir=path.parent,
+            prefix=f".{path.name}.",
+            suffix=".uploading",
+            delete=False,
+        ) as temporary:
+            temporary_path = Path(temporary.name)
+            temporary.write(contents)
+            temporary.flush()
+            os.fsync(temporary.fileno())
+        if PERSISTENT_STORAGE is not None:
+            PERSISTENT_STORAGE.upload_file(temporary_path, path.name)
+        temporary_path.replace(path)
+    finally:
+        if temporary_path is not None:
+            temporary_path.unlink(missing_ok=True)
+
+
+def persistent_storage_status():
+    return (
+        "Persistent storage: connected"
+        if PERSISTENT_STORAGE is not None
+        else "Persistent storage not configured — uploads may be lost after restart."
+    )
 
 
 def build_analysis_context(scope, start_date=None, end_date=None):
@@ -656,6 +689,8 @@ def replace_workbook(contents, destination):
             temporary.write(contents)
             temporary.flush()
             os.fsync(temporary.fileno())
+        if PERSISTENT_STORAGE is not None:
+            PERSISTENT_STORAGE.upload_file(temporary_path, destination.name)
         try:
             temporary_path.replace(destination)
         except PermissionError as exc:
@@ -1415,6 +1450,7 @@ background:#174a38;color:white;font:inherit;font-weight:600;cursor:pointer}}
                 template = (TEMPLATE_DIR / "stock.html").read_text(encoding="utf-8")
                 encoded = json.dumps(payload, ensure_ascii=False, separators=(",", ":"), allow_nan=False).replace("</", "<\\/")
                 page = template.replace("__STOCK_DATA__", encoded)
+                page = page.replace("__STORAGE_STATUS__", persistent_storage_status())
                 page = self._render_owner_controls(page)
                 return self.send_bytes(200, page.encode("utf-8"), "text/html; charset=utf-8")
             except Exception as exc:
@@ -1431,6 +1467,7 @@ background:#174a38;color:white;font:inherit;font-weight:600;cursor:pointer}}
                     allow_nan=False,
                 ).replace("</", "<\\/")
                 page = template.replace("__BILLING_DATA__", encoded)
+                page = page.replace("__STORAGE_STATUS__", persistent_storage_status())
                 page = self._render_owner_controls(page)
                 return self.send_bytes(200, page.encode("utf-8"), "text/html; charset=utf-8")
             except Exception as exc:
@@ -1488,6 +1525,7 @@ background:#174a38;color:white;font:inherit;font-weight:600;cursor:pointer}}
             template = (TEMPLATE_DIR / "index.html").read_text(encoding="utf-8")
             encoded = json.dumps(payload, ensure_ascii=False, separators=(",", ":"), allow_nan=False).replace("</", "<\\/")
             page = template.replace("__REPORT_DATA__", encoded)
+            page = page.replace("__STORAGE_STATUS__", persistent_storage_status())
             page = self._render_owner_controls(page)
             return self.send_bytes(200, page.encode("utf-8"), "text/html; charset=utf-8")
         except Exception as exc:
@@ -1655,7 +1693,10 @@ background:#174a38;color:white;font:inherit;font-weight:600;cursor:pointer}}
                     "todayAchievement": required_amount("todayAchievement", "today's achievement"),
                     "productSales": cleaned_products,
                 }
-                NEPAL_MANUAL_PATH.write_text(json.dumps(saved, ensure_ascii=False, indent=2), encoding="utf-8")
+                persist_data_file(
+                    NEPAL_MANUAL_PATH,
+                    json.dumps(saved, ensure_ascii=False, indent=2).encode("utf-8"),
+                )
                 with _CACHE_LOCK:
                     _CACHE.update({"mtime": None, "payload": None})
                 return self.send_bytes(200, json.dumps({"ok": True, "period": saved["period"]}).encode("utf-8"), "application/json; charset=utf-8")
@@ -1729,7 +1770,10 @@ background:#174a38;color:white;font:inherit;font-weight:600;cursor:pointer}}
                 meta_path = META_PATH
                 cache = _CACHE
             loaded_at = datetime.now().strftime("%Y-%m-%d %H:%M")
-            meta_path.write_text(json.dumps({"source_name": filename, "loaded_at": loaded_at}), encoding="utf-8")
+            persist_data_file(
+                meta_path,
+                json.dumps({"source_name": filename, "loaded_at": loaded_at}).encode("utf-8"),
+            )
             with _CACHE_LOCK:
                 cache.update({"mtime": None, "payload": None})
             response = json.dumps({
@@ -1761,6 +1805,24 @@ def main():
     parser.add_argument("--host", default="127.0.0.1", help="Address to bind the web server to")
     parser.add_argument("--port", type=int, default=int(os.environ.get("PORT", "5000")), help="Web server port")
     args = parser.parse_args()
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    if PERSISTENT_STORAGE is not None:
+        sync_result = PERSISTENT_STORAGE.sync_data_files(DATA_DIR, BACKUP_FILE_NAMES)
+        print(
+            "External storage ready: "
+            f"{len(sync_result['restored'])} files restored, "
+            f"{len(sync_result['seeded'])} initial files seeded."
+        )
+    elif os.environ.get("RENDER"):
+        print(
+            "WARNING: Render is running without external workbook storage. "
+            "Configure the SALES_MIS_STORAGE_* variables before uploading data."
+        )
+    else:
+        print(
+            "INFO: external workbook storage is not configured. "
+            "Uploads may be lost after a restart or redeploy."
+        )
     if not WORKBOOK_PATH.exists():
         raise SystemExit(f"Starting workbook not found: {WORKBOOK_PATH}")
     if args.check:
