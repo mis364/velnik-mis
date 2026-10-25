@@ -29,7 +29,7 @@ except ModuleNotFoundError as exc:
 from weekly import build_weekly_performance
 from workbook_utils import clean_text, number
 from billing_efficiency import build_billing_efficiency_report
-from persistent_storage import PersistentObjectStorage
+from persistent_storage import from_environment
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -113,7 +113,7 @@ _STOCK_CACHE = {"mtime": None, "payload": None}
 _WEEKLY_CACHE = {"mtime": None, "payload": None}
 _LAST_YEAR_CACHE = {"mtime": None, "payload": None}
 _BILLING_EFFICIENCY_CACHE = {"mtime": None, "payload": None}
-PERSISTENT_STORAGE = PersistentObjectStorage.from_environment()
+PERSISTENT_STORAGE = from_environment()
 
 
 def persist_data_file(path, contents):

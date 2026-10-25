@@ -60,15 +60,22 @@ To restore a local installation, stop the server, extract the ZIP into the proje
 
 ### Keep Render uploads across deployments
 
-Render's free web-service filesystem is ephemeral. To keep uploaded workbooks and Nepal manual-entry data when the service restarts or redeploys, use a private Cloudflare R2 Standard bucket as external object storage. R2's published free tier includes up to 10 GB-month of Standard storage, 1 million Class A operations, 10 million Class B operations, and free egress per month; check the [current R2 pricing](https://developers.cloudflare.com/r2/pricing/) because provider terms can change.
+Render's free web-service filesystem is ephemeral. To keep uploaded workbooks and Nepal manual-entry data when the service restarts or redeploys, configure one of the supported external object-storage providers. The app supports Google Drive Shared Drives through a Google Cloud service account or Cloudflare R2 through S3-compatible credentials. Only configure one provider at a time.
 
-1. Before the first deployment with external storage, sign in to the live app and download a backup. Keep this archive encrypted and outside the repository.
-2. Create a private R2 bucket and an R2 API token scoped to **Object Read & Write** access for that bucket. Keep its secret key private; do not paste it in chat, commit it, or add it to source files.
-3. In the Render service's **Environment** settings, set `SALES_MIS_STORAGE_BUCKET` to the bucket name; `SALES_MIS_STORAGE_ENDPOINT_URL` to `https://<ACCOUNT_ID>.r2.cloudflarestorage.com`; `SALES_MIS_STORAGE_ACCESS_KEY_ID` and `SALES_MIS_STORAGE_SECRET_ACCESS_KEY` to the R2 token values. Set `SALES_MIS_STORAGE_REGION` to `auto` and `SALES_MIS_STORAGE_PREFIX` to `velnik-mis/`.
-4. Deploy/restart after setting all four required storage variables. The app downloads previously stored files at startup, seeds missing objects from local data files, and writes future workbook/manual-data changes to R2 before reporting upload success. The sales, stock, weekly, prior-year, billing-efficiency and Nepal manual-entry files are included. A partially configured storage setup prevents the app from starting rather than silently discarding uploads.
-5. After that deployment, sign in and upload every current workbook from the backup through its report section: sales, stock, weekly plan, prior-year sales, and billing efficiency. This one-time step moves data from Render's temporary filesystem into R2; re-enter Nepal manual values if needed. Check the page's **Persistent storage: connected** status before relying on future uploads.
+#### Google Drive Shared Drive setup
 
-Do not deploy the storage change until you have downloaded the live backup. Files already on Render's temporary filesystem cannot be recovered by the app after Render has discarded them. Keep downloading encrypted backups regularly even when R2 is enabled.
+1. Before deploying the storage change, sign in to the live app and download a backup. Keep this archive encrypted and outside the repository.
+2. In [Google Cloud Console](https://console.cloud.google.com/), create/select a project, enable the **Google Drive API**, and create a service account. Create a JSON key and store it securely; do not commit it or share it in chat.
+3. In Google Drive, create or choose a folder inside your organization's **Shared Drive**. Add the service account's email address (shown in its Google Cloud account details) as a **Content manager** on the Shared Drive. Personal My Drive isn't supported by this service-account setup.
+4. Copy the folder ID from the folder URL. In the Render service's **Environment** settings, set `SALES_MIS_STORAGE_PROVIDER` to `google_drive`, `GOOGLE_DRIVE_FOLDER_ID` to the folder ID, and `GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON` to the entire contents of the service account JSON key file. Keep the JSON private. Clear any old `SALES_MIS_STORAGE_*` R2 credentials so only one provider is configured.
+5. Save the environment variables and let Render redeploy. At startup the app restores known report files from the Drive folder and seeds missing objects from local data. Future workbook uploads and Nepal manual changes are written to Drive before the app confirms success. A partially configured provider prevents the app from starting instead of silently claiming uploads are persistent.
+6. Sign in, confirm the pages show **Persistent storage: connected**, and upload every current workbook from the backup once: sales, stock, weekly plan, prior-year sales, and billing efficiency. Re-enter any Nepal manual figures if needed. Keep downloading encrypted backups regularly.
+
+#### Cloudflare R2 setup
+
+Create a private R2 Standard bucket and an R2 API token scoped to **Object Read & Write** access for that bucket. In Render, set `SALES_MIS_STORAGE_PROVIDER` to `r2`, `SALES_MIS_STORAGE_BUCKET` to the bucket name, `SALES_MIS_STORAGE_ENDPOINT_URL` to `https://<ACCOUNT_ID>.r2.cloudflarestorage.com`, `SALES_MIS_STORAGE_ACCESS_KEY_ID` and `SALES_MIS_STORAGE_SECRET_ACCESS_KEY` to the token values, `SALES_MIS_STORAGE_REGION` to `auto`, and `SALES_MIS_STORAGE_PREFIX` to `velnik-mis/`. Keep the token private. Check [current R2 pricing](https://developers.cloudflare.com/r2/pricing/) for free-tier limits and billing terms.
+
+Do not deploy the storage change until you have downloaded the live backup. Files already on Render's temporary filesystem cannot be recovered by the app after Render has discarded them. The first configured deployment must be followed by re-uploading the current workbooks from the backup to seed external storage.
 
 Reports and distributor details require owner sign-in. GitHub repository access is separate from site access. Keep the repository private because its tracked workbooks contain business data; if it has ever been public, making it private does not remove copies from Git history or prior downloads.
 

@@ -10,15 +10,9 @@ services:
         sync: false
       - key: SALES_MIS_PASSWORD
         sync: false
-      - key: SALES_MIS_STORAGE_BUCKET
+      - key: SALES_MIS_STORAGE_PROVIDER
         sync: false
-      - key: SALES_MIS_STORAGE_ENDPOINT_URL
+      - key: GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON
         sync: false
-      - key: SALES_MIS_STORAGE_ACCESS_KEY_ID
+      - key: GOOGLE_DRIVE_FOLDER_ID
         sync: false
-      - key: SALES_MIS_STORAGE_SECRET_ACCESS_KEY
-        sync: false
-      - key: SALES_MIS_STORAGE_REGION
-        value: auto
-      - key: SALES_MIS_STORAGE_PREFIX
-        value: velnik-mis/
