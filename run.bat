@@ -23,7 +23,7 @@ if not exist "%~dp0.venv\Scripts\python.exe" (
   )
 )
 set "PYTHON=%~dp0.venv\Scripts\python.exe"
-"%PYTHON%" -c "import pandas, openpyxl, reportlab; assert tuple(map(int, pandas.__version__.split('.')[:2])) >= (2, 0); assert tuple(map(int, openpyxl.__version__.split('.')[:2])) >= (3, 1); assert tuple(map(int, reportlab.Version.split('.')[:2])) >= (4, 0)" >nul 2>&1
+"%PYTHON%" -c "import pandas, openpyxl; assert tuple(map(int, pandas.__version__.split('.')[:2])) >= (2, 0); assert tuple(map(int, openpyxl.__version__.split('.')[:2])) >= (3, 1)" >nul 2>&1
 if errorlevel 1 (
   echo Installing missing Sales MIS dependencies...
   "%PYTHON%" -m pip install -r requirements.txt

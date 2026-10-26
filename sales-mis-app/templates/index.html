@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sales MIS | Full Analysis</title>
+  <link rel="stylesheet" href="/static/styles.css">
+  <script id="report-data" type="application/json">__REPORT_DATA__</script>
+  <script src="/static/app.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="#top"><span class="brand-mark">S</span><span>SALES MIS</span></a>
+    <nav aria-label="Main navigation">
+      <a href="#snapshot">Snapshot</a>
+      <a href="#improve">Analysis</a>
+      <a href="#products">Products</a>
+      <a href="#distributors">Distributors</a>
+      <a href="#recurring">Refresh</a>
+    </nav>
+    <div class="source-chip"><span class="live-dot" aria-hidden="true"></span><span id="sourceName">Workbook loaded</span></div>
+  </header>
+
+  <main class="page" id="top">
+    <section class="hero">
+      <div>
+        <p class="kicker">SALES PERFORMANCE · MIS</p>
+        <h1>Sales overview</h1>
+        <p class="hero-copy">Daily movement, plan gaps, product mix, and distributors to follow up.</p>
+      </div>
+      <div class="as-of"><span>REPORT PERIOD</span><strong id="periodLabel">—</strong></div>
+    </section>
+
+    <section class="stats" id="stats" aria-label="Key sales figures"></section>
+
+    <section class="section" id="snapshot">
+      <div class="section-heading">
+        <div><p class="kicker">01 · DAILY SALES</p><h2>Sales snapshot</h2><p class="muted">Amounts without GST unless a card says “with tax”.</p></div>
+        <div class="date-filters">
+          <label>From <input type="date" id="dateFrom"></label>
+          <label>To <input type="date" id="dateTo"></label>
+          <button class="button primary" id="applyDates" type="button">Update view</button>
+        </div>
+      </div>
+      <div class="grid two">
+        <article class="panel">
+          <div class="panel-heading"><div><h3>Sales by day</h3><p class="muted" id="dailyCaption">Daily sales in lakh</p></div><span class="unit">LAKH</span></div>
+          <div id="dailyChart" role="img" aria-label="Daily sales chart"></div>
+        </article>
+        <article class="panel">
+          <div class="panel-heading"><div><h3>Sales by state / region</h3><p class="muted">Top locations in the selected date range</p></div><span class="unit">LAKH</span></div>
+          <div id="stateBars" class="bar-list" role="img" aria-label="Sales by state or region"></div>
+        </article>
+      </div>
+    </section>
+
+    <section class="section" id="improve">
+      <div class="section-heading"><div><p class="kicker">02 · WHERE TO IMPROVE</p><h2>Action points from the data</h2><p class="muted">These are areas to review; the workbook alone cannot explain the cause.</p></div></div>
+      <div id="insights" class="insight-grid"></div>
+      <article class="panel table-panel">
+        <div class="panel-heading"><div><h3>State / region plan progress</h3><p class="muted" id="planCaption">Plan, achievement, and remaining gap from the workbook.</p></div><span class="unit">LAKH</span></div>
+        <div class="table-scroll">
+          <table><thead><tr><th>State / region</th><th class="num">Plan</th><th class="num">Achieved</th><th class="num">Achievement</th><th class="num">Gap to plan</th></tr></thead><tbody id="planRows"></tbody></table>
+        </div>
+      </article>
+      <div id="qualityNotes" class="quality-notes" aria-live="polite"></div>
+    </section>
+
+    <section class="section" id="products">
+      <div class="section-heading"><div><p class="kicker">03 · PRODUCT MIX</p><h2>Product mix report</h2><p class="muted">Ranked by sales without GST for the selected date range.</p></div><span class="unit">LAKH</span></div>
+      <article class="panel"><div id="productBars" class="bar-list" role="img" aria-label="Product sales chart"></div><p class="muted small" id="productCaption"></p></article>
+    </section>
+
+    <section class="section" id="distributors">
+      <div class="section-heading"><div><p class="kicker">04 · FOLLOW UP</p><h2>Active distributors with zero billing</h2><p class="muted">From the workbook’s “Zero Billing DB” flag. Confirm with the representative before acting.</p></div><span class="status-pill" id="followCount">—</span></div>
+      <article class="panel table-panel">
+        <div class="table-tools">
+          <label class="search-label">Search distributor, code, or representative<input id="followSearch" type="search" placeholder="Type to search"></label>
+          <label>State / region<select id="stateFilter"><option value="">All states / regions</option></select></label>
+          <label>Representative<select id="repFilter"><option value="">All representatives</option></select></label>
+          <button class="button" id="downloadCsv" type="button">Download CSV</button>
+        </div>
+        <div class="table-scroll">
+          <table><thead><tr><th>Distributor</th><th>DB code</th><th>State / region</th><th>Sales representative</th><th>Area manager</th><th>Super stockist</th></tr></thead><tbody id="followRows"></tbody></table>
+        </div>
+        <div class="table-footer"><span id="pageSummary" aria-live="polite"></span><div class="pagination"><button class="button" id="prevPage" type="button">Previous</button><button class="button" id="nextPage" type="button">Next</button></div></div>
+      </article>
+    </section>
+
+    <section class="section" id="recurring">
+      <div class="section-heading"><div><p class="kicker">05 · RECURRING REPORT</p><h2>Upload and refresh</h2><p class="muted">A new workbook recalculates the whole page and is saved locally on this computer.</p></div></div>
+      <article class="refresh-panel">
+        <div><h3>Refresh from Excel</h3><p>Upload an <strong>.xlsx</strong> file with the <strong>Raw</strong> and <strong>SS to DB Sale</strong> sheets. The <strong>Without GST</strong> sheet adds plan-gap analysis.</p><p class="muted small">The app runs only while its local server is open. Scheduled email or updates while the computer is off need a separate scheduler/host.</p><p id="uploadStatus" class="upload-status" role="status">Current source: —</p></div>
+        <label class="button primary upload-button" for="workbookFile">Choose workbook<input id="workbookFile" type="file" accept=".xlsx" hidden></label>
+      </article>
+      <div class="footnote" id="dateWarning"></div>
+    </section>
+    <footer>Sales values are in lakh. “With tax” and “Without GST” are separate source measures. This report is for review; confirm unusual values with the source team.</footer>
+  </main>
+</body>
+</html>
