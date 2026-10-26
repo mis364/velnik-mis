@@ -1371,58 +1371,6 @@ background:#174a38;color:white;font:inherit;font-weight:600;cursor:pointer}}
             return re.sub(r"<!--GUEST-ONLY-->.*?<!--/GUEST-ONLY-->", "", template, flags=re.DOTALL)
         return re.sub(r"<!--OWNER-ONLY-->.*?<!--/OWNER-ONLY-->", "", template, flags=re.DOTALL)
 
-    def _send_workbook_required_page(self):
-        page = """<!doctype html>
-<html lang="en"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="robots" content="noindex, nofollow">
-<title>Upload sales workbook | Velnik MIS</title>
-<style>
-*{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;
-background:#f4f6f3;color:#1c2c25;font:16px Arial,sans-serif}
-main{width:min(100% - 32px,560px);padding:32px;background:#fff;border:1px solid #dfe5e0;
-border-radius:12px;box-shadow:0 8px 28px #243b2f12}
-h1{margin:0 0 12px;font-size:26px}p{color:#58665f;line-height:1.55}
-input{display:block;width:100%;margin:22px 0;padding:12px;border:1px solid #aab7ae;
-border-radius:6px;font:inherit}
-button{padding:12px 18px;border:0;border-radius:6px;background:#174a38;color:white;
-font:inherit;font-weight:600;cursor:pointer}button:disabled{opacity:.6;cursor:wait}
-#uploadStatus{min-height:24px}#uploadStatus.error{color:#b42318}
-</style></head><body><main>
-<h1>Upload your sales workbook</h1>
-<p>No sales workbook is available yet. Choose the current <strong>.xlsx</strong> workbook to start the report.
-It must include the <strong>Raw</strong> and <strong>SS to DB Sale</strong> sheets. Your upload will be saved
-and loaded automatically.</p>
-<form id="workbookUpload"><label for="workbook">Sales workbook (.xlsx)</label>
-<input id="workbook" name="workbook" type="file" accept=".xlsx" required>
-<button id="uploadButton" type="submit">Upload workbook</button>
-<p id="uploadStatus" role="status" aria-live="polite"></p></form>
-<script>
-const form=document.getElementById('workbookUpload');
-const button=document.getElementById('uploadButton');
-const status=document.getElementById('uploadStatus');
-form.addEventListener('submit',async event=>{
-  event.preventDefault();
-  const file=document.getElementById('workbook').files[0];
-  if(!file)return;
-  button.disabled=true;
-  status.classList.remove('error');
-  status.textContent=`Uploading ${file.name}…`;
-  try{
-    const response=await fetch('/upload',{method:'POST',body:new FormData(form)});
-    const result=await response.json();
-    if(!response.ok||!result.ok)throw new Error(result.error||'Upload failed.');
-    status.textContent='Workbook uploaded. Loading the report…';
-    location.reload();
-  }catch(error){
-    status.textContent=error.message||'Upload failed.';
-    status.classList.add('error');
-    button.disabled=false;
-  }
-});
-</script></main></body></html>"""
-        return self.send_bytes(200, page.encode("utf-8"), "text/html; charset=utf-8")
-
     def do_GET(self):
         path = urlparse(self.path).path
         if path == "/health":
@@ -1455,8 +1403,6 @@ form.addEventListener('submit',async event=>{
                 )
             if not self._has_valid_session():
                 return self._redirect("/login")
-        if path == "/" and not WORKBOOK_PATH.is_file():
-            return self._send_workbook_required_page()
         if path == "/backup-download":
             username, password = self._credentials()
             if not username or not password:
@@ -1534,48 +1480,51 @@ form.addEventListener('submit',async event=>{
         if path != "/":
             return self.send_bytes(404, b"Not found", "text/plain; charset=utf-8")
         try:
-            payload = {**get_report(), "weeklyPerformance": get_weekly_performance()}
-            try:
-                last_year_report = get_last_year_report()
-                last_year_error = None
-            except (OSError, ValueError, KeyError, IndexError) as exc:
-                last_year_report = None
-                last_year_error = str(exc)
-            payload["lastYearData"] = (
-                {
-                    "source": last_year_report["source"],
-                    "loadedAt": last_year_report["loadedAt"],
-                    "history": last_year_report["history"],
-                }
-                if last_year_report
-                else None
-            )
-            payload["lastYearError"] = last_year_error
-            try:
-                stock_report = get_stock_report()
-                stock_state_error = None
-            except (OSError, ValueError, KeyError, IndexError) as exc:
-                stock_report = None
-                stock_state_error = str(exc)
-            payload["stockStateData"] = (
-                {
-                    "reportDate": stock_report["reportDate"],
-                    "states": stock_report["states"],
-                }
-                if stock_report
-                else None
-            )
-            payload["stockStateError"] = stock_state_error
-            payload["populationRegions"] = [
-                {
-                    "state": state,
-                    "population": population,
-                    **POPULATION_REGION_MEMBERS[state],
-                }
-                for state, population in POPULATION_PROJECTIONS_2026.items()
-            ]
-            payload["populationSource"] = POPULATION_SOURCE
-            payload["populationSourceUrl"] = POPULATION_SOURCE_URL
+            if WORKBOOK_PATH.is_file():
+                payload = {**get_report(), "available": True, "weeklyPerformance": get_weekly_performance()}
+                try:
+                    last_year_report = get_last_year_report()
+                    last_year_error = None
+                except (OSError, ValueError, KeyError, IndexError) as exc:
+                    last_year_report = None
+                    last_year_error = str(exc)
+                payload["lastYearData"] = (
+                    {
+                        "source": last_year_report["source"],
+                        "loadedAt": last_year_report["loadedAt"],
+                        "history": last_year_report["history"],
+                    }
+                    if last_year_report
+                    else None
+                )
+                payload["lastYearError"] = last_year_error
+                try:
+                    stock_report = get_stock_report()
+                    stock_state_error = None
+                except (OSError, ValueError, KeyError, IndexError) as exc:
+                    stock_report = None
+                    stock_state_error = str(exc)
+                payload["stockStateData"] = (
+                    {
+                        "reportDate": stock_report["reportDate"],
+                        "states": stock_report["states"],
+                    }
+                    if stock_report
+                    else None
+                )
+                payload["stockStateError"] = stock_state_error
+                payload["populationRegions"] = [
+                    {
+                        "state": state,
+                        "population": population,
+                        **POPULATION_REGION_MEMBERS[state],
+                    }
+                    for state, population in POPULATION_PROJECTIONS_2026.items()
+                ]
+                payload["populationSource"] = POPULATION_SOURCE
+                payload["populationSourceUrl"] = POPULATION_SOURCE_URL
+            else:
+                payload = {"available": False}
             template = (TEMPLATE_DIR / "index.html").read_text(encoding="utf-8")
             encoded = json.dumps(payload, ensure_ascii=False, separators=(",", ":"), allow_nan=False).replace("</", "<\\/")
             page = template.replace("__REPORT_DATA__", encoded)

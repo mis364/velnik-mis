@@ -210,8 +210,8 @@ class AuthenticationTests(unittest.TestCase):
             self.assertIn(b"Choose workbook", body)
             self.assertIn(b"Download backup", body)
         else:
-            self.assertIn(b"No sales workbook is available yet", body)
-            self.assertIn(b'id="workbookUpload"', body)
+            self.assertIn(b"<h1>Sales overview</h1>", body)
+            self.assertIn(b'id="workbookFile"', body)
 
         status, _, body = self.request(
             "POST",
@@ -267,9 +267,10 @@ class AuthenticationTests(unittest.TestCase):
                 )
 
         self.assertEqual(status, 200)
-        self.assertIn(b"No sales workbook is available yet", body)
-        self.assertIn(b'id="workbookUpload"', body)
-        self.assertIn(b"fetch('/upload'", body)
+        self.assertIn(b'id="report-data" type="application/json">{"available":false}</script>', body)
+        self.assertIn(b"<h1>Sales overview</h1>", body)
+        self.assertIn(b'id="workbookFile"', body)
+        self.assertNotIn(b"Upload sales workbook | Velnik MIS", body)
         self.assertIn(b"SS to DB Sale", body)
 
     def test_missing_credentials_fail_closed(self):

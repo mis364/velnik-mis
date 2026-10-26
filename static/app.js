@@ -1,4 +1,49 @@
 const DATA = JSON.parse(document.getElementById('report-data').textContent);
+if (!DATA.available) {
+  document.body.classList.add('no-sales-workbook');
+  document.querySelectorAll('main.page > section:not(.hero):not(#recurring)').forEach(section => {
+    section.style.display = 'none';
+  });
+  document.querySelectorAll('nav a').forEach(link => {
+    if (link.getAttribute('href') !== '#recurring' &&
+        !['/backup-download', '/logout'].includes(link.getAttribute('href'))) {
+      link.style.display = 'none';
+    }
+  });
+  document.querySelector('.hero-copy').textContent =
+    'Upload your sales workbook to start viewing the report.';
+  document.getElementById('periodLabel').textContent = 'Awaiting workbook';
+  document.getElementById('sourceLoadedAt').textContent = 'No sales workbook uploaded yet';
+  document.getElementById('sourceName').textContent = 'No workbook uploaded';
+  document.querySelector('#recurring h2').textContent = 'Upload your first sales workbook';
+  document.querySelector('#recurring .refresh-panel h3').textContent = 'Start the sales report';
+  document.getElementById('uploadStatus').textContent =
+    'Choose an .xlsx workbook with the Raw and SS to DB Sale sheets.';
+  document.querySelector('#recurring .refresh-panel .muted.small').textContent =
+    'After upload, the report will load automatically. On Render, uploads may be lost after a restart or redeploy unless external storage is configured.';
+  const workbookFile = document.getElementById('workbookFile');
+  workbookFile.addEventListener('change', async event => {
+    const file = event.target.files[0];
+    if (!file) return;
+    const status = document.getElementById('uploadStatus');
+    status.textContent = `Uploading ${file.name}…`;
+    status.classList.remove('error');
+    const form = new FormData();
+    form.append('workbook', file);
+    try {
+      const response = await fetch('/upload', { method: 'POST', body: form });
+      const result = await response.json();
+      if (!response.ok || !result.ok) throw new Error(result.error || 'Upload failed.');
+      status.textContent = 'Workbook uploaded. Loading the dashboard…';
+      location.reload();
+    } catch (error) {
+      status.textContent = error.message || 'Upload failed.';
+      status.classList.add('error');
+    } finally {
+      event.target.value = '';
+    }
+  });
+} else {
 const REPORT_ANALYSIS = globalThis.SalesMISAnalysis;
 const PAGE_SIZE = 25;
 let pageNumber = 0;
@@ -617,3 +662,4 @@ if (weeklyWorkbookFile) weeklyWorkbookFile.addEventListener('change', async even
 renderWeeklyPerformance();
 renderNepalPanel();
 render();
+}
