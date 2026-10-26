@@ -205,9 +205,13 @@ class AuthenticationTests(unittest.TestCase):
             headers={"Cookie": cookie.split(";", 1)[0]},
         )
         self.assertEqual(status, 200)
-        self.assertIn(b'data-owner="true"', body)
-        self.assertIn(b"Choose workbook", body)
-        self.assertIn(b"Download backup", body)
+        if app.WORKBOOK_PATH.is_file():
+            self.assertIn(b'data-owner="true"', body)
+            self.assertIn(b"Choose workbook", body)
+            self.assertIn(b"Download backup", body)
+        else:
+            self.assertIn(b"No sales workbook is available yet", body)
+            self.assertIn(b'id="workbookUpload"', body)
 
         status, _, body = self.request(
             "POST",
@@ -243,6 +247,30 @@ class AuthenticationTests(unittest.TestCase):
             )
         self.assertEqual(status, 200)
         self.assertIn(b'id="billing-upload"', body)
+
+    def test_home_page_allows_initial_sales_workbook_upload(self):
+        _, login_headers, _ = self.request(
+            "POST",
+            "/login",
+            body="username=owner&password=test-password",
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+        )
+        cookie = dict(login_headers)["Set-Cookie"].split(";", 1)[0]
+
+        with tempfile.TemporaryDirectory() as directory:
+            missing_workbook = Path(directory) / "latest.xlsx"
+            with patch.object(app, "WORKBOOK_PATH", missing_workbook):
+                status, _, body = self.request(
+                    "GET",
+                    "/",
+                    headers={"Cookie": cookie},
+                )
+
+        self.assertEqual(status, 200)
+        self.assertIn(b"No sales workbook is available yet", body)
+        self.assertIn(b'id="workbookUpload"', body)
+        self.assertIn(b"fetch('/upload'", body)
+        self.assertIn(b"SS to DB Sale", body)
 
     def test_missing_credentials_fail_closed(self):
         with patch.dict(os.environ, {"SALES_MIS_USERNAME": "", "SALES_MIS_PASSWORD": ""}):
