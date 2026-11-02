@@ -289,14 +289,28 @@ function renderStats(days) {
   const gross = total(days, 'gross');
   const lines = total(days, 'lines');
   const missing = total(days, 'missingNet');
+  const kpis = DATA.executiveKpis || {};
+  const plan = Number(kpis.planTotal) || 0;
+  const achievement = fullReportSelected() ? (Number(kpis.netTotal) || sales) : sales;
+  const achievementPct = plan ? achievement / plan : null;
+  const projection = Number(kpis.projectedMonthEnd) || 0;
+  const forecastVariance = Number(kpis.forecastVariance) || 0;
+  const growth = REPORT_ANALYSIS.periodComparison(DATA.history, from, to);
+  const growthText = growth.available && growth.changePct !== null
+    ? `${growth.changePct >= 0 ? '+' : ''}${growth.changePct.toFixed(1)}% vs previous period`
+    : 'Previous-period baseline unavailable';
   const cards = [
-    ['Sales on ' + dayText(to), money(currentDay?.net) + ' lakh', 'Without GST'],
-    ['Selected-period sales', money(sales) + ' lakh', 'With tax from Raw: ' + money(gross) + ' lakh'],
-    ['Active zero-billing distributors', whole(DATA.quality.activeZeroBilling), 'Flagged in the source workbook'],
-    ['Missing net values', whole(missing), 'Of ' + whole(lines) + ' sales lines'],
+    { label: 'MTD sales', value: money(achievement) + ' lakh', note: growthText, tone: growth.available && growth.changePct < 0 ? 'negative' : 'positive' },
+    { label: 'Monthly plan', value: money(plan) + ' lakh', note: `${kpis.elapsedDays || 0} of ${kpis.daysInMonth || 0} days elapsed`, tone: 'neutral' },
+    { label: 'Plan achievement', value: achievementPct === null ? '—' : achievementPct.toLocaleString('en-IN', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + '%', note: `${money(achievement)} lakh achieved`, tone: achievementPct >= 1 ? 'positive' : achievementPct >= 0.8 ? 'warning' : 'negative' },
+    { label: 'Projected month end', value: money(projection) + ' lakh', note: `${forecastVariance >= 0 ? '+' : ''}${money(forecastVariance)} lakh vs plan`, tone: forecastVariance >= 0 ? 'positive' : 'negative' },
+    { label: 'Remaining plan gap', value: money(Number(kpis.remainingGap) || Math.max(0, plan - achievement)) + ' lakh', note: `${kpis.daysRemaining || 0} days remaining`, tone: (Number(kpis.remainingGap) || Math.max(0, plan - achievement)) <= 0 ? 'positive' : 'warning' },
+    { label: 'Sales on ' + dayText(to), value: money(currentDay?.net) + ' lakh', note: 'Without GST · gross ' + money(currentDay?.gross) + ' lakh', tone: 'neutral' },
+    { label: 'Active zero-billing distributors', value: whole(DATA.quality.activeZeroBilling), note: 'Follow-up action list available', tone: DATA.quality.activeZeroBilling > 0 ? 'warning' : 'positive' },
+    { label: 'Missing net values', value: whole(missing), note: 'Of ' + whole(lines) + ' sales lines', tone: missing > 0 ? 'negative' : 'positive' },
   ];
   document.getElementById('stats').innerHTML = cards.map(card => `
-    <article class="stat"><span class="stat-label">${safe(card[0])}</span><strong class="stat-value">${safe(card[1])}</strong><span class="stat-note">${safe(card[2])}</span></article>`).join('');
+    <article class="stat kpi-${safe(card.tone)}"><span class="stat-label">${safe(card.label)}</span><strong class="stat-value">${safe(card.value)}</strong><span class="stat-note">${safe(card.note)}</span></article>`).join('');
   document.getElementById('periodLabel').textContent = `${dayText(from, true)} – ${dayText(to, true)}`;
   document.getElementById('dailyCaption').textContent = `${dayText(from)}–${dayText(to)} · ${money(rawSales)} lakh from dated Raw transactions`;
 }

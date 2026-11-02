@@ -5,6 +5,10 @@
 .pytest_cache
 .mypy_cache
 .vscode
+.idea
 data
 tests
 sales-mis-app
+*.xlsx
+*.xlsm
+*.zip

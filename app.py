@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import calendar
 import hashlib
 import hmac
 import json
@@ -64,7 +65,9 @@ BACKUP_FILE_NAMES = (
 )
 SESSION_COOKIE_NAME = "sales_mis_session"
 SESSION_TTL_SECONDS = 12 * 60 * 60
-SESSION_SIGNING_KEY = os.urandom(32)
+SESSION_SIGNING_KEY = (
+    os.environ.get("SALES_MIS_SESSION_SIGNING_KEY", "").encode("utf-8") or os.urandom(32)
+)
 REQUIRED_SHEETS = {"Raw", "SS to DB Sale"}
 REQUIRED_STOCK_SHEETS = {"Stock", "Item Stock CS & SS Stock", "State wise Stock"}
 POPULATION_PROJECTIONS_2026 = {
@@ -710,6 +713,31 @@ def get_column(columns, predicate):
     return None
 
 
+def calculate_executive_kpis(state_plan, net_total, period_end):
+    plan_total = sum((number(row.get("plan")) or 0.0) for row in state_plan)
+    achievement_total = sum((number(row.get("achievement")) or 0.0) for row in state_plan)
+    remaining_gap = max(0.0, plan_total - net_total)
+    elapsed_days = max(1, period_end.day)
+    days_in_month = calendar.monthrange(period_end.year, period_end.month)[1]
+    daily_run_rate = net_total / elapsed_days
+    projected_month_end = daily_run_rate * days_in_month
+    forecast_variance = projected_month_end - plan_total
+    return {
+        "planTotal": plan_total,
+        "achievementTotal": achievement_total,
+        "achievementPct": achievement_total / plan_total if plan_total else None,
+        "netTotal": net_total,
+        "remainingGap": remaining_gap,
+        "elapsedDays": elapsed_days,
+        "daysInMonth": days_in_month,
+        "daysRemaining": max(0, days_in_month - elapsed_days),
+        "dailyRunRate": daily_run_rate,
+        "projectedMonthEnd": projected_month_end,
+        "forecastVariance": forecast_variance,
+        "forecastStatus": "ahead" if forecast_variance >= 0 else "behind",
+    }
+
+
 def find_plan_columns(frame):
     columns = list(frame.columns)
     state_col = get_column(columns, lambda x: x == "state")
@@ -923,11 +951,13 @@ def build_report(workbook_source, source_name="latest.xlsx", loaded_at=None, man
     tariff_col = "Tariff" if "Tariff" in month.columns else None
     missing_tariff = int(pd.to_numeric(month[tariff_col], errors="coerce").isna().sum()) if tariff_col else 0
     report_period = {"start": first_date.strftime("%Y-%m-%d"), "end": last_date.strftime("%Y-%m-%d")}
+    executive_kpis = calculate_executive_kpis(state_plan, net_total, last_date)
 
     return {
         "source": source_name,
         "loadedAt": loaded_at or datetime.now().strftime("%Y-%m-%d %H:%M"),
         "period": report_period,
+        "executiveKpis": executive_kpis,
         "daily": daily,
         "stateByDay": grouped_daily("State", "Without GST"),
         "productByDay": grouped_daily("Item Group2", "Without GST"),
@@ -1262,6 +1292,8 @@ def validate_billing_efficiency_workbook_bytes(contents):
 
 class SalesMISHandler(BaseHTTPRequestHandler):
     server_version = "SalesMIS/1.0"
+    protocol_version = "HTTP/1.1"
+    timeout = 30
 
     @staticmethod
     def _credentials():
@@ -1344,6 +1376,10 @@ background:#174a38;color:white;font:inherit;font-weight:600;cursor:pointer}}
         self.send_response(303)
         self.send_header("Location", location)
         self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("X-Frame-Options", "DENY")
+        self.send_header("Referrer-Policy", "no-referrer")
+        self.send_header("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=()")
         self.send_header("Content-Length", "0")
         self.end_headers()
 
@@ -1353,7 +1389,9 @@ background:#174a38;color:white;font:inherit;font-weight:600;cursor:pointer}}
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
         self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("X-Frame-Options", "DENY")
         self.send_header("Referrer-Policy", "no-referrer")
+        self.send_header("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=()")
         self.end_headers()
         self.wfile.write(body)
 
@@ -1438,11 +1476,21 @@ background:#174a38;color:white;font:inherit;font-weight:600;cursor:pointer}}
             self.wfile.write(body)
             return
         if path.startswith("/static/"):
-            filename = Path(path.removeprefix("/static/")).name
-            file_path = STATIC_DIR / filename
-            if not file_path.exists() or file_path.parent != STATIC_DIR:
+            relative_name = path.removeprefix("/static/")
+            if not relative_name or "\\" in relative_name:
+                return self.send_bytes(404, b"Not found", "text/plain; charset=utf-8")
+            file_path = (STATIC_DIR / relative_name).resolve()
+            try:
+                file_path.relative_to(STATIC_DIR.resolve())
+            except ValueError:
+                return self.send_bytes(404, b"Not found", "text/plain; charset=utf-8")
+            if not file_path.is_file():
                 return self.send_bytes(404, b"Not found", "text/plain; charset=utf-8")
             content_type = mimetypes.guess_type(file_path.name)[0] or "application/octet-stream"
+            if file_path.suffix.lower() in {".js", ".mjs"}:
+                content_type = "text/javascript"
+            elif file_path.suffix.lower() == ".css":
+                content_type = "text/css"
             return self.send_bytes(200, file_path.read_bytes(), content_type + "; charset=utf-8")
         if path == "/stock":
             try:
@@ -1803,7 +1851,7 @@ background:#174a38;color:white;font:inherit;font-weight:600;cursor:pointer}}
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Local Sales MIS dashboard")
+    parser = argparse.ArgumentParser(description="AWS Sales MIS dashboard")
     parser.add_argument("--check", action="store_true", help="Read the current workbook and print a data summary")
     parser.add_argument("--host", default="127.0.0.1", help="Address to bind the web server to")
     parser.add_argument("--port", type=int, default=int(os.environ.get("PORT", "5000")), help="Web server port")
@@ -1816,15 +1864,10 @@ def main():
             f"{len(sync_result['restored'])} files restored, "
             f"{len(sync_result['seeded'])} initial files seeded."
         )
-    elif os.environ.get("RENDER"):
-        print(
-            "WARNING: Render is running without external workbook storage. "
-            "Configure the SALES_MIS_STORAGE_* variables before uploading data."
-        )
     else:
         print(
-            "INFO: external workbook storage is not configured. "
-            "Uploads may be lost after a restart or redeploy."
+            "INFO: S3 workbook storage is not configured. "
+            "Local storage is available for development only and is not durable in AWS."
         )
     if args.check:
         if not WORKBOOK_PATH.is_file():

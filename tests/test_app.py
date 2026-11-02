@@ -15,6 +15,23 @@ import app
 from billing_efficiency import build_billing_efficiency_report
 
 
+class ExecutiveKpiTests(unittest.TestCase):
+    def test_calculates_plan_gap_forecast_and_status(self):
+        kpis = app.calculate_executive_kpis(
+            [{"state": "UP", "plan": 100, "achievement": 60}],
+            60,
+            pd.Timestamp("2026-10-31").to_pydatetime(),
+        )
+        self.assertEqual(kpis["planTotal"], 100)
+        self.assertEqual(kpis["achievementPct"], 0.6)
+        self.assertEqual(kpis["remainingGap"], 40)
+        self.assertEqual(kpis["elapsedDays"], 31)
+        self.assertEqual(kpis["daysRemaining"], 0)
+        self.assertEqual(kpis["dailyRunRate"], 60 / 31)
+        self.assertEqual(kpis["projectedMonthEnd"], 60)
+        self.assertEqual(kpis["forecastStatus"], "behind")
+
+
 class BillingEfficiencyReportTests(unittest.TestCase):
     def create_workbook(self, rows):
         temporary = tempfile.TemporaryFile()
@@ -278,6 +295,19 @@ class AuthenticationTests(unittest.TestCase):
             status, _, body = self.request("GET", "/login")
         self.assertEqual(status, 503)
         self.assertIn(b"Owner sign-in is not configured", body)
+
+    def test_static_assets_are_served_with_correct_javascript_mime_type(self):
+        status, headers, body = self.request("GET", "/static/language.js")
+        self.assertEqual(status, 200)
+        self.assertIn(b"localStorage", body)
+        header_map = dict(headers)
+        self.assertTrue(header_map["Content-Type"].startswith("text/javascript"))
+        self.assertEqual(header_map["X-Frame-Options"], "DENY")
+        self.assertEqual(header_map["X-Content-Type-Options"], "nosniff")
+
+    def test_static_asset_path_cannot_escape_static_directory(self):
+        status, _, _ = self.request("GET", "/static/../app.py")
+        self.assertEqual(status, 404)
 
     def test_billing_efficiency_upload_accepts_macro_workbook_separately(self):
         workbook_bytes = BytesIO()

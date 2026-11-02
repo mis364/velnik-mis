@@ -5,15 +5,53 @@ const languageButtons = [...document.querySelectorAll('.language-button')];
 let analysisLanguage = 'en';
 let lastQuestion = '';
 let lastAnswerElement = null;
+const CHAT_HISTORY_KEY = 'sales-mis-ai-chat-history';
+const MAX_HISTORY_MESSAGES = 100;
 
-function addChatMessage(role, content, isError = false) {
+function saveChatHistory() {
+  const history = [...chatMessagesElement.querySelectorAll('.ai-message')]
+    .map(message => ({
+      role: message.classList.contains('user') ? 'user' : 'assistant',
+      content: message.textContent,
+      isError: message.classList.contains('error'),
+    }))
+    .filter(message => message.role === 'user' || !message.content.startsWith('Checking the selected report data'))
+    .slice(-MAX_HISTORY_MESSAGES);
+  try {
+    localStorage.setItem(CHAT_HISTORY_KEY, JSON.stringify(history));
+  } catch (_) {
+    // Keep the chat usable when browser storage is unavailable or full.
+  }
+}
+
+function restoreChatHistory() {
+  let history = [];
+  try {
+    history = JSON.parse(localStorage.getItem(CHAT_HISTORY_KEY) || '[]');
+  } catch (_) {
+    history = [];
+  }
+  if (!Array.isArray(history) || history.length === 0) return;
+
+  chatMessagesElement.replaceChildren();
+  for (const item of history.slice(-MAX_HISTORY_MESSAGES)) {
+    if (!item || typeof item.content !== 'string') continue;
+    if (item.role !== 'user' && item.role !== 'assistant') continue;
+    addChatMessage(item.role, item.content, Boolean(item.isError), false);
+  }
+}
+
+function addChatMessage(role, content, isError = false, shouldSave = true) {
   const message = document.createElement('p');
   message.className = `ai-message ${role}${isError ? ' error' : ''}`;
   message.textContent = content;
   chatMessagesElement.append(message);
   chatMessagesElement.scrollTop = chatMessagesElement.scrollHeight;
+  if (shouldSave) saveChatHistory();
   return message;
 }
+
+restoreChatHistory();
 
 async function runAnalysis(question, addQuestion) {
   if (addQuestion) {
@@ -50,10 +88,13 @@ async function runAnalysis(question, addQuestion) {
     const result = await response.json();
     if (!response.ok || !result.ok) throw new Error(result.error || 'AI analysis failed.');
     waiting.textContent = result.answer;
+    waiting.classList.remove('error');
     chatMessagesElement.scrollTop = chatMessagesElement.scrollHeight;
+    saveChatHistory();
   } catch (error) {
     waiting.textContent = error.message || 'AI analysis failed. Please try again.';
     waiting.classList.add('error');
+    saveChatHistory();
   } finally {
     submit.disabled = false;
     submit.textContent = 'Analyze';

@@ -1,0 +1,499 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "Velnik MIS on Amazon ECS Express Mode with private S3 workbook storage.",
+  "Parameters": {
+    "ContainerImage": {
+      "Type": "String",
+      "Default": "unset",
+      "Description": "Private ECR image URI. Leave unset for the first deployment phase."
+    }
+  },
+  "Conditions": {
+    "DeployService": {
+      "Fn::Not": [
+        {
+          "Fn::Equals": [
+            {
+              "Ref": "ContainerImage"
+            },
+            "unset"
+          ]
+        }
+      ]
+    }
+  },
+  "Resources": {
+    "WorkbookBucket": {
+      "Type": "AWS::S3::Bucket",
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain",
+      "Properties": {
+        "BucketEncryption": {
+          "ServerSideEncryptionConfiguration": [
+            {
+              "ServerSideEncryptionByDefault": {
+                "SSEAlgorithm": "AES256"
+              }
+            }
+          ]
+        },
+        "OwnershipControls": {
+          "Rules": [
+            {
+              "ObjectOwnership": "BucketOwnerEnforced"
+            }
+          ]
+        },
+        "PublicAccessBlockConfiguration": {
+          "BlockPublicAcls": true,
+          "BlockPublicPolicy": true,
+          "IgnorePublicAcls": true,
+          "RestrictPublicBuckets": true
+        }
+      }
+    },
+    "ImageRepository": {
+      "Type": "AWS::ECR::Repository",
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain",
+      "Properties": {
+        "ImageScanningConfiguration": {
+          "ScanOnPush": true
+        },
+        "ImageTagMutability": "MUTABLE",
+        "EncryptionConfiguration": {
+          "EncryptionType": "AES256"
+        }
+      }
+    },
+    "OwnerUsernameSecret": {
+      "Type": "AWS::SecretsManager::Secret",
+      "DeletionPolicy": "Retain",
+      "Properties": {
+        "Description": "Velnik MIS owner login username.",
+        "GenerateSecretString": {
+          "PasswordLength": 20,
+          "ExcludePunctuation": true
+        },
+        "Name": {
+          "Fn::Sub": "${AWS::StackName}/SALES_MIS_USERNAME"
+        }
+      }
+    },
+    "OwnerPasswordSecret": {
+      "Type": "AWS::SecretsManager::Secret",
+      "DeletionPolicy": "Retain",
+      "Properties": {
+        "Description": "Velnik MIS owner login password.",
+        "GenerateSecretString": {
+          "PasswordLength": 32,
+          "ExcludePunctuation": true
+        },
+        "Name": {
+          "Fn::Sub": "${AWS::StackName}/SALES_MIS_PASSWORD"
+        }
+      }
+    },
+    "SessionSigningKeySecret": {
+      "Type": "AWS::SecretsManager::Secret",
+      "DeletionPolicy": "Retain",
+      "Properties": {
+        "Description": "Persistent signing key for Velnik MIS owner sessions.",
+        "GenerateSecretString": {
+          "PasswordLength": 64,
+          "ExcludePunctuation": true
+        },
+        "Name": {
+          "Fn::Sub": "${AWS::StackName}/SALES_MIS_SESSION_SIGNING_KEY"
+        }
+      }
+    },
+    "TaskExecutionRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "ecs-tasks.amazonaws.com"
+              },
+              "Action": "sts:AssumeRole"
+            }
+          ]
+        },
+        "ManagedPolicyArns": [
+          "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
+        ],
+        "Policies": [
+          {
+            "PolicyName": "ReadOwnerLoginSecrets",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Action": "secretsmanager:GetSecretValue",
+                  "Resource": [
+                    {
+                      "Ref": "OwnerUsernameSecret"
+                    },
+                    {
+                      "Ref": "OwnerPasswordSecret"
+                    },
+                    {
+                      "Ref": "SessionSigningKeySecret"
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "WorkbookTaskRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "ecs-tasks.amazonaws.com"
+              },
+              "Action": "sts:AssumeRole"
+            }
+          ]
+        },
+        "Policies": [
+          {
+            "PolicyName": "AccessVelnikMisWorkbookObjects",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Action": "s3:ListBucket",
+                  "Resource": {
+                    "Fn::GetAtt": [
+                      "WorkbookBucket",
+                      "Arn"
+                    ]
+                  },
+                  "Condition": {
+                    "StringLike": {
+                      "s3:prefix": [
+                        "velnik-mis/",
+                        "velnik-mis/*"
+                      ]
+                    }
+                  }
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "s3:GetObject",
+                    "s3:PutObject"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "${WorkbookBucket.Arn}/velnik-mis/*"
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "CodeBuildSourceBucket": {
+      "Type": "AWS::S3::Bucket",
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain",
+      "Properties": {
+        "BucketEncryption": {
+          "ServerSideEncryptionConfiguration": [
+            {
+              "ServerSideEncryptionByDefault": {
+                "SSEAlgorithm": "AES256"
+              }
+            }
+          ]
+        },
+        "OwnershipControls": {
+          "Rules": [{ "ObjectOwnership": "BucketOwnerEnforced" }]
+        },
+        "PublicAccessBlockConfiguration": {
+          "BlockPublicAcls": true,
+          "BlockPublicPolicy": true,
+          "IgnorePublicAcls": true,
+          "RestrictPublicBuckets": true
+        },
+        "LifecycleConfiguration": {
+          "Rules": [{
+            "Id": "ExpireBuildSources",
+            "Status": "Enabled",
+            "ExpirationInDays": 7
+          }]
+        }
+      }
+    },
+    "CodeBuildRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [{
+            "Effect": "Allow",
+            "Principal": { "Service": "codebuild.amazonaws.com" },
+            "Action": "sts:AssumeRole"
+          }]
+        },
+        "Policies": [{
+          "PolicyName": "BuildVelnikMisImage",
+          "PolicyDocument": {
+            "Version": "2012-10-17",
+            "Statement": [
+              {
+                "Effect": "Allow",
+                "Action": ["logs:CreateLogGroup", "logs:CreateLogStream", "logs:PutLogEvents"],
+                "Resource": "*"
+              },
+              {
+                "Effect": "Allow",
+                "Action": ["s3:GetObject", "s3:GetObjectVersion"],
+                "Resource": { "Fn::Sub": "${CodeBuildSourceBucket.Arn}/source.zip" }
+              },
+              {
+                "Effect": "Allow",
+                "Action": "ecr:GetAuthorizationToken",
+                "Resource": "*"
+              },
+              {
+                "Effect": "Allow",
+                "Action": [
+                  "ecr:BatchCheckLayerAvailability",
+                  "ecr:BatchGetImage",
+                  "ecr:CompleteLayerUpload",
+                  "ecr:DescribeImages",
+                  "ecr:DescribeRepositories",
+                  "ecr:GetDownloadUrlForLayer",
+                  "ecr:InitiateLayerUpload",
+                  "ecr:PutImage",
+                  "ecr:UploadLayerPart"
+                ],
+                "Resource": { "Fn::GetAtt": ["ImageRepository", "Arn"] }
+              }
+            ]
+          }
+        }]
+      }
+    },
+    "ImageBuildProject": {
+      "Type": "AWS::CodeBuild::Project",
+      "Properties": {
+        "Name": { "Fn::Sub": "${AWS::StackName}-image-build" },
+        "Description": "Remote Docker image build for Velnik MIS",
+        "ServiceRole": { "Fn::GetAtt": ["CodeBuildRole", "Arn"] },
+        "Artifacts": { "Type": "NO_ARTIFACTS" },
+        "Source": {
+          "Type": "S3",
+          "Location": { "Fn::Sub": "${CodeBuildSourceBucket}/source.zip" },
+          "BuildSpec": "version: 0.2\nphases:\n  build:\n    commands:\n      - aws ecr get-login-password --region $AWS_DEFAULT_REGION | docker login --username AWS --password-stdin $(echo $IMAGE_REPO_URI | cut -d/ -f1)\n      - docker build --pull -t $IMAGE_REPO_URI:$IMAGE_TAG .\n      - docker push $IMAGE_REPO_URI:$IMAGE_TAG\n"
+        },
+        "Environment": {
+          "Type": "LINUX_CONTAINER",
+          "ComputeType": "BUILD_GENERAL1_SMALL",
+          "Image": "aws/codebuild/standard:7.0",
+          "PrivilegedMode": true,
+          "EnvironmentVariables": [{
+            "Name": "AWS_DEFAULT_REGION",
+            "Value": { "Ref": "AWS::Region" }
+          }]
+        },
+        "TimeoutInMinutes": 30,
+        "LogsConfig": {
+          "CloudWatchLogs": { "Status": "ENABLED" },
+          "S3Logs": { "Status": "DISABLED" }
+        }
+      }
+    },
+    "ExpressInfrastructureRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "ecs.amazonaws.com"
+              },
+              "Action": "sts:AssumeRole"
+            }
+          ]
+        },
+        "ManagedPolicyArns": [
+          "arn:aws:iam::aws:policy/service-role/AmazonECSInfrastructureRoleforExpressGatewayServices"
+        ]
+      }
+    },
+    "ApplicationLogGroup": {
+      "Type": "AWS::Logs::LogGroup",
+      "Properties": {
+        "LogGroupName": {
+          "Fn::Sub": "/ecs/${AWS::StackName}"
+        },
+        "RetentionInDays": 30
+      }
+    },
+    "ReportService": {
+      "Type": "AWS::ECS::ExpressGatewayService",
+      "Condition": "DeployService",
+      "Properties": {
+        "ServiceName": {
+          "Ref": "AWS::StackName"
+        },
+        "Cpu": "1024",
+        "Memory": "2048",
+        "HealthCheckPath": "/health",
+        "ExecutionRoleArn": {
+          "Fn::GetAtt": [
+            "TaskExecutionRole",
+            "Arn"
+          ]
+        },
+        "TaskRoleArn": {
+          "Fn::GetAtt": [
+            "WorkbookTaskRole",
+            "Arn"
+          ]
+        },
+        "InfrastructureRoleArn": {
+          "Fn::GetAtt": [
+            "ExpressInfrastructureRole",
+            "Arn"
+          ]
+        },
+        "PrimaryContainer": {
+          "Image": {
+            "Ref": "ContainerImage"
+          },
+          "ContainerPort": 8080,
+          "AwsLogsConfiguration": {
+            "LogGroup": {
+              "Ref": "ApplicationLogGroup"
+            },
+            "LogStreamPrefix": "ecs"
+          },
+          "Environment": [
+            {
+              "Name": "PORT",
+              "Value": "8080"
+            },
+            {
+              "Name": "SALES_MIS_STORAGE_PROVIDER",
+              "Value": "s3"
+            },
+            {
+              "Name": "SALES_MIS_STORAGE_BUCKET",
+              "Value": {
+                "Ref": "WorkbookBucket"
+              }
+            },
+            {
+              "Name": "SALES_MIS_STORAGE_REGION",
+              "Value": {
+                "Ref": "AWS::Region"
+              }
+            },
+            {
+              "Name": "SALES_MIS_STORAGE_PREFIX",
+              "Value": "velnik-mis/"
+            }
+          ],
+          "Secrets": [
+            {
+              "Name": "SALES_MIS_USERNAME",
+              "ValueFrom": {
+                "Ref": "OwnerUsernameSecret"
+              }
+            },
+            {
+              "Name": "SALES_MIS_PASSWORD",
+              "ValueFrom": {
+                "Ref": "OwnerPasswordSecret"
+              }
+            },
+            {
+              "Name": "SALES_MIS_SESSION_SIGNING_KEY",
+              "ValueFrom": {
+                "Ref": "SessionSigningKeySecret"
+              }
+            }
+          ]
+        },
+        "ScalingTarget": {
+          "MinTaskCount": 1,
+          "MaxTaskCount": 1
+        }
+      }
+    }
+  },
+  "Outputs": {
+    "ImageRepositoryUri": {
+      "Description": "Private Amazon ECR repository for the app image.",
+      "Value": {
+        "Fn::GetAtt": [
+          "ImageRepository",
+          "RepositoryUri"
+        ]
+      }
+    },
+    "WorkbookBucketName": {
+      "Description": "Private S3 bucket storing report workbooks.",
+      "Value": {
+        "Ref": "WorkbookBucket"
+      }
+    },
+    "CodeBuildSourceBucketName": {
+      "Description": "Temporary private S3 source bucket for remote image builds.",
+      "Value": {
+        "Ref": "CodeBuildSourceBucket"
+      }
+    },
+    "CodeBuildProjectName": {
+      "Description": "AWS CodeBuild project that builds the container image without Docker Desktop.",
+      "Value": {
+        "Ref": "ImageBuildProject"
+      }
+    },
+    "OwnerUsernameSecretArn": {
+      "Description": "Use Secrets Manager to retrieve the generated owner username.",
+      "Value": {
+        "Ref": "OwnerUsernameSecret"
+      }
+    },
+    "OwnerPasswordSecretArn": {
+      "Description": "Use Secrets Manager to retrieve the generated owner password.",
+      "Value": {
+        "Ref": "OwnerPasswordSecret"
+      }
+    },
+    "SessionSigningKeySecretArn": {
+      "Description": "Persistent session-signing key stored in Secrets Manager.",
+      "Value": {
+        "Ref": "SessionSigningKeySecret"
+      }
+    },
+    "ServiceArn": {
+      "Condition": "DeployService",
+      "Description": "Amazon ECS Express Mode service ARN.",
+      "Value": {
+        "Ref": "ReportService"
+      }
+    }
+  }
+}
