@@ -187,6 +187,8 @@ tbody tr:hover { box-shadow: inset 3px 0 var(--teal); }
 @keyframes messageIn { from { opacity: 0; transform: translateY(7px); } to { opacity: 1; transform: translateY(0); } }
 @media (max-width:760px) {
   body { overflow-x: hidden; }
+  .page, .section, .panel, .table-panel, .table-scroll { min-width: 0; max-width: 100%; }
+  .table-scroll { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; }
   .topbar { position: sticky; flex-wrap: wrap; gap: 10px !important; padding: 10px 14px !important; }
   .topbar nav { order: 3; width: 100%; flex-basis: 100%; flex-wrap: nowrap !important; overflow-x: auto; overflow-y: hidden; gap: 14px !important; padding-bottom: 5px; scrollbar-width: thin; }
   .topbar nav a { flex: 0 0 auto; white-space: nowrap; }
