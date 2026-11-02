@@ -185,6 +185,13 @@ tbody tr:hover { box-shadow: inset 3px 0 var(--teal); }
 @keyframes livePulse { 70% { box-shadow: 0 0 0 7px rgba(53,162,115,0); } 100% { box-shadow: 0 0 0 0 rgba(53,162,115,0); } }
 @keyframes growBar { from { transform: scaleX(0); } to { transform: scaleX(1); } }
 @keyframes messageIn { from { opacity: 0; transform: translateY(7px); } to { opacity: 1; transform: translateY(0); } }
+@media (max-width:760px) {
+  body { overflow-x: hidden; }
+  .topbar { position: sticky; flex-wrap: wrap; gap: 10px !important; padding: 10px 14px !important; }
+  .topbar nav { order: 3; width: 100%; flex-basis: 100%; flex-wrap: nowrap !important; overflow-x: auto; overflow-y: hidden; gap: 14px !important; padding-bottom: 5px; scrollbar-width: thin; }
+  .topbar nav a { flex: 0 0 auto; white-space: nowrap; }
+  .source-chip { margin-left: auto; }
+}
 @media (max-width:680px) {
   .hero { min-height: auto; border-radius: 14px; padding: 20px; }
   .hero::after { right: -100px; }
