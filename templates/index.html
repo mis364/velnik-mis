@@ -11,6 +11,7 @@
   <script src="/static/app.js" defer></script>
   <script src="/static/ai-chat.js" defer></script>
   <script src="/static/language.js" defer></script>
+  <script src="/static/ui-enhancements.js" defer></script>
 </head>
 <body data-owner="__OWNER_SESSION__">
   <header class="topbar">
@@ -49,7 +50,7 @@
     <section class="section" id="recurring">
       <div class="section-heading"><div><p class="kicker">DAILY WORKBOOK</p><h2>Upload today's sales workbook</h2><p class="muted">The latest uploaded workbook is shown automatically when you open this page. Upload today's .xlsx file to refresh the report.</p></div></div>
       <!--OWNER-ONLY--><article class="refresh-panel">
-        <div><h3>Refresh from Excel</h3><p>Choose an .xlsx file with the <strong>Raw</strong> and <strong>SS to DB Sale</strong> sheets. The <strong>Without GST</strong> sheet adds plan-gap analysis.</p><p class="muted small">On Render's free service, uploaded files may be lost after a restart or redeploy. Check the workbook name and upload time below; download a backup before planned restarts.</p><p id="uploadStatus" class="upload-status" role="status">Latest workbook: —</p></div>
+        <div><h3>Refresh from Excel</h3><p>Choose an .xlsx file with the <strong>Raw</strong> and <strong>SS to DB Sale</strong> sheets. The <strong>Without GST</strong> sheet adds plan-gap analysis.</p><p class="muted small">Uploaded files are synchronized to private S3 storage. Always download a backup before major workbook changes.</p><p id="uploadStatus" class="upload-status" role="status">Latest workbook: —</p></div>
         <label class="button primary upload-button" for="workbookFile">Choose workbook<input id="workbookFile" type="file" accept=".xlsx" hidden></label>
       </article><!--/OWNER-ONLY-->
       <!--GUEST-ONLY--><p class="muted small">Workbook uploads are managed by the owner. The report below uses the latest workbook currently available on the service.</p><!--/GUEST-ONLY-->

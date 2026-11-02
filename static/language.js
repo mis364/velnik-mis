@@ -89,7 +89,7 @@
     'Choose an .xlsx file with the': 'ऐसी .xlsx फ़ाइल चुनें जिसमें',
     'sheets. The': 'शीट हों।',
     'sheet adds plan-gap analysis.': 'शीट योजना-अंतर विश्लेषण जोड़ती है।',
-    'On Render\'s free service, uploaded files may be lost after a restart or redeploy. Check the workbook name and upload time below; download a backup before planned restarts.': 'Render की निःशुल्क सेवा में रीस्टार्ट या पुनः डिप्लॉय के बाद अपलोड की गई फ़ाइलें खो सकती हैं। नीचे वर्कबुक का नाम और अपलोड समय देखें; नियोजित रीस्टार्ट से पहले बैकअप डाउनलोड करें।',
+    'Uploaded files are synchronized to private S3 storage. Always download a backup before major workbook changes.': 'अपलोड की गई फ़ाइलें निजी S3 स्टोरेज में सिंक्रनाइज़ होती हैं। बड़े वर्कबुक बदलाव से पहले हमेशा बैकअप डाउनलोड करें।',
     'Choose workbook': 'वर्कबुक चुनें',
     'Workbook uploads are managed by the owner. The report below uses the latest workbook currently available on the service.': 'वर्कबुक अपलोड का प्रबंधन मालिक करता है। नीचे की रिपोर्ट सेवा पर उपलब्ध नवीनतम वर्कबुक का उपयोग करती है।',
     'LOCAL · BUSINESS ANALYST': 'स्थानीय · व्यवसाय विश्लेषण',

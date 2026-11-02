@@ -20,7 +20,7 @@ if (!DATA.available) {
   document.getElementById('uploadStatus').textContent =
     'Choose an .xlsx workbook with the Raw and SS to DB Sale sheets.';
   document.querySelector('#recurring .refresh-panel .muted.small').textContent =
-    'After upload, the report will load automatically. On Render, uploads may be lost after a restart or redeploy unless external storage is configured.';
+    'After upload, the report will load automatically and the workbook will synchronize to private S3 storage.';
   const workbookFile = document.getElementById('workbookFile');
   workbookFile.addEventListener('change', async event => {
     const file = event.target.files[0];
