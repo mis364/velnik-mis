@@ -111,6 +111,7 @@ POPULATION_REGION_MEMBERS = {
 POPULATION_SOURCE = "MoHFW / National Commission on Population, Population Projections for India and States 2011–2036 (2020), projected population as of 1 July 2026"
 POPULATION_SOURCE_URL = "https://nhm.gov.in/New_Updates_2018/Report_Population_Projection_2019.pdf"
 _CACHE_LOCK = threading.Lock()
+_UPLOAD_LOCK = threading.Lock()
 _CACHE = {"mtime": None, "payload": None}
 _STOCK_CACHE = {"mtime": None, "payload": None}
 _WEEKLY_CACHE = {"mtime": None, "payload": None}
@@ -704,6 +705,20 @@ def replace_workbook(contents, destination):
     finally:
         if temporary_path is not None:
             temporary_path.unlink(missing_ok=True)
+
+
+def publish_workbook_upload(contents, workbook_path, meta_path, cache, filename, validator):
+    with _UPLOAD_LOCK:
+        validator(contents)
+        replace_workbook(contents, workbook_path)
+        loaded_at = datetime.now().strftime("%Y-%m-%d %H:%M")
+        persist_data_file(
+            meta_path,
+            json.dumps({"source_name": filename, "loaded_at": loaded_at}).encode("utf-8"),
+        )
+        with _CACHE_LOCK:
+            cache.update({"mtime": None, "payload": None})
+        return loaded_at
 
 
 def get_column(columns, predicate):
@@ -1796,37 +1811,38 @@ background:#174a38;color:white;font:inherit;font-weight:600;cursor:pointer}}
             if not contents:
                 raise ValueError("The selected file is empty.")
             if is_billing_efficiency_upload:
-                validate_billing_efficiency_workbook_bytes(contents)
-                replace_workbook(contents, BILLING_EFFICIENCY_WORKBOOK_PATH)
+                workbook_path = BILLING_EFFICIENCY_WORKBOOK_PATH
                 meta_path = BILLING_EFFICIENCY_META_PATH
                 cache = _BILLING_EFFICIENCY_CACHE
+                validator = validate_billing_efficiency_workbook_bytes
             elif is_last_year_upload:
-                validate_workbook_bytes(contents)
-                replace_workbook(contents, LAST_YEAR_WORKBOOK_PATH)
+                workbook_path = LAST_YEAR_WORKBOOK_PATH
                 meta_path = LAST_YEAR_META_PATH
                 cache = _LAST_YEAR_CACHE
+                validator = validate_workbook_bytes
             elif is_weekly_upload:
-                validate_weekly_workbook_bytes(contents)
-                replace_workbook(contents, WEEKLY_WORKBOOK_PATH)
+                workbook_path = WEEKLY_WORKBOOK_PATH
                 meta_path = WEEKLY_META_PATH
                 cache = _WEEKLY_CACHE
+                validator = validate_weekly_workbook_bytes
             elif is_stock_upload:
-                validate_stock_workbook_bytes(contents)
-                replace_workbook(contents, STOCK_WORKBOOK_PATH)
+                workbook_path = STOCK_WORKBOOK_PATH
                 meta_path = STOCK_META_PATH
                 cache = _STOCK_CACHE
+                validator = validate_stock_workbook_bytes
             else:
-                validate_workbook_bytes(contents)
-                replace_workbook(contents, WORKBOOK_PATH)
+                workbook_path = WORKBOOK_PATH
                 meta_path = META_PATH
                 cache = _CACHE
-            loaded_at = datetime.now().strftime("%Y-%m-%d %H:%M")
-            persist_data_file(
+                validator = validate_workbook_bytes
+            loaded_at = publish_workbook_upload(
+                contents,
+                workbook_path,
                 meta_path,
-                json.dumps({"source_name": filename, "loaded_at": loaded_at}).encode("utf-8"),
+                cache,
+                filename,
+                validator,
             )
-            with _CACHE_LOCK:
-                cache.update({"mtime": None, "payload": None})
             response = json.dumps({
                 "ok": True,
                 "filename": filename,

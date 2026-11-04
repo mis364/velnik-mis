@@ -15,14 +15,22 @@ if (!DATA.available) {
   document.getElementById('periodLabel').textContent = 'Awaiting workbook';
   document.getElementById('sourceLoadedAt').textContent = 'No sales workbook uploaded yet';
   document.getElementById('sourceName').textContent = 'No workbook uploaded';
-  document.querySelector('#recurring h2').textContent = 'Upload your first sales workbook';
-  document.querySelector('#recurring .refresh-panel h3').textContent = 'Start the sales report';
-  document.getElementById('uploadStatus').textContent =
-    'Choose an .xlsx workbook with the Raw and SS to DB Sale sheets.';
-  document.querySelector('#recurring .refresh-panel .muted.small').textContent =
-    'After upload, the report will load automatically and the workbook will synchronize to private S3 storage.';
+  const recurringHeading = document.querySelector('#recurring h2');
+  if (recurringHeading) recurringHeading.textContent = 'Upload your first sales workbook';
+  const refreshHeading = document.querySelector('#recurring .refresh-panel h3');
+  if (refreshHeading) refreshHeading.textContent = 'Start the sales report';
+  const uploadStatus = document.getElementById('uploadStatus');
+  if (uploadStatus) {
+    uploadStatus.textContent =
+      'Choose an .xlsx workbook with the Raw and SS to DB Sale sheets.';
+  }
+  const refreshNote = document.querySelector('#recurring .refresh-panel .muted.small');
+  if (refreshNote) {
+    refreshNote.textContent =
+      'After upload, the report will load automatically and the workbook will synchronize to private S3 storage.';
+  }
   const workbookFile = document.getElementById('workbookFile');
-  workbookFile.addEventListener('change', async event => {
+  if (workbookFile) workbookFile.addEventListener('change', async event => {
     const file = event.target.files[0];
     if (!file) return;
     const status = document.getElementById('uploadStatus');
