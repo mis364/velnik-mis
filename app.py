@@ -1371,14 +1371,17 @@ class SalesMISHandler(BaseHTTPRequestHandler):
 <script src="/static/language.js" defer></script>
 <style>
 *{{box-sizing:border-box}}body{{margin:0;min-height:100vh;display:grid;place-items:center;
-background:#f4f6f3;color:#1c2c25;font:16px Arial,sans-serif}}
-main{{width:min(100% - 32px,400px);padding:32px;background:#fff;border:1px solid #dfe5e0;
-border-radius:12px;box-shadow:0 8px 28px #243b2f12}}
-h1{{margin:0 0 8px;font-size:24px}}p{{color:#58665f}}
-label{{display:block;margin:18px 0 6px;font-weight:600}}
-input{{width:100%;padding:12px;border:1px solid #aab7ae;border-radius:6px;font:inherit}}
-button{{width:100%;margin-top:22px;padding:12px;border:0;border-radius:6px;
-background:#174a38;color:white;font:inherit;font-weight:600;cursor:pointer}}
+background:radial-gradient(circle at 85% 5%,rgba(216,173,88,.16),transparent 22rem),#f8f7f2;color:#15172e;font:16px "Segoe UI",Arial,sans-serif}}
+main{{position:relative;width:min(100% - 32px,420px);padding:38px;background:#fff;border:1px solid rgba(201,154,60,.26);
+border-radius:18px;box-shadow:0 18px 48px rgba(9,12,48,.14);overflow:hidden}}
+main::before{{content:"";position:absolute;top:0;left:0;width:100%;height:5px;background:linear-gradient(90deg,#090c30,#d8ad58,#090c30)}}
+h1{{margin:0 0 8px;color:#090c30;font-size:28px;letter-spacing:-.03em}}p{{color:#69708a}}
+label{{display:block;margin:18px 0 6px;color:#343851;font-weight:700;font-size:13px}}
+input{{width:100%;padding:12px 14px;border:1px solid #e8e3d6;border-radius:8px;color:#15172e;font:inherit}}
+input:focus{{outline:none;border-color:#c99a3c;box-shadow:0 0 0 3px rgba(201,154,60,.12)}}
+button{{width:100%;margin-top:22px;padding:12px;border:0;border-radius:8px;
+background:#090c30;color:white;font:inherit;font-weight:700;cursor:pointer;box-shadow:0 8px 18px rgba(9,12,48,.14)}}
+button:hover{{filter:brightness(1.12)}}
 </style></head><body><main><button id="pageLanguageToggle" type="button" aria-label="पेज की भाषा हिंदी में बदलें" style="width:auto;margin:0 0 18px;padding:8px 12px">हिन्दी</button><h1>Velnik MIS</h1>
 <p>Sign in with the owner account to view reports, upload workbooks, and update figures.</p>{message}
 <form method="post" action="/login" autocomplete="on">
