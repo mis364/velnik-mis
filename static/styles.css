@@ -285,3 +285,54 @@ tbody tr:hover { background: #fffaf0; box-shadow: inset 3px 0 #c99a3c; }
 .live-dot { background: #d8ad58; }
 @media (max-width:680px) { .topbar { height: auto; } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; } .reveal { opacity: 1; transform: none; } }
+
+/* Velnik-only color system: gold and white */
+:root {
+  --ink: #ad7d2a;
+  --muted: #b08a43;
+  --line: #dfc27d;
+  --paper: #fff;
+  --navy: #c49a45;
+  --teal: #c49a45;
+  --amber: #ad7d2a;
+  --gold: #c49a45;
+  --gold-light: #f5e8bd;
+  --shadow: 0 8px 28px rgba(196,154,69,.12);
+  --shadow-soft: 0 14px 36px rgba(196,154,69,.12);
+  --shadow-lift: 0 18px 42px rgba(196,154,69,.16);
+}
+body { background: #fff !important; color: #ad7d2a !important; }
+body, h1, h2, h3, h4, p, a, label, span, strong, small, th, td, button, input, select, textarea { text-shadow: none; }
+.topbar { height: 76px; border-bottom: 1px solid #dfc27d; background: #fff !important; box-shadow: 0 1px 0 rgba(196,154,69,.18); }
+.brand { color: #ad7d2a !important; }
+.brand-mark { border: 1px solid #dfc27d; background: linear-gradient(135deg,#f7edc9,#c49a45) !important; color: #fff !important; box-shadow: 0 7px 18px rgba(196,154,69,.22); }
+.topbar nav, .source-chip, .muted, .hero-copy, .stat-label, .stat-note, .axis-label, .mix-value small { color: #b08a43 !important; }
+.topbar nav a:hover, .topbar nav a.active { color: #9d7020 !important; }
+.topbar nav a::after, .live-dot { background: #c49a45 !important; }
+.live-dot { box-shadow: 0 0 0 0 rgba(196,154,69,.45); }
+.hero { border: 1px solid #dfc27d !important; border-radius: 18px; background: linear-gradient(135deg,#fffdf7,#f5e8bd) !important; box-shadow: var(--shadow-soft) !important; }
+.hero::after { border: 18px solid rgba(196,154,69,.14); background: radial-gradient(circle,rgba(196,154,69,.12),transparent 68%); }
+.hero h1, .hero .hero-copy, .hero .as-of strong, .hero .as-of small, .hero .as-of span, .kicker { color: #ad7d2a !important; }
+.hero .kicker { color: #9d7020 !important; }
+.hero .as-of { border-left-color: #dfc27d; }
+.stat, .panel, .refresh-panel, .insight, .nepal-metric, .table-panel { border-color: #dfc27d !important; background: #fff !important; box-shadow: var(--shadow) !important; }
+.stat-value, .bar-value, tbody, th, td, .panel-heading h3, .section-heading h2 { color: #ad7d2a !important; }
+.stat-value { background: none !important; color: #9d7020 !important; }
+.stat.kpi-positive, .stat.kpi-warning, .stat.kpi-negative, .stat.kpi-neutral { border-top-color: #c49a45; }
+.stat::after { background: rgba(196,154,69,.07); }
+.sales-bar { fill: #c49a45; }
+.sales-bar.latest { fill: #9d7020; }
+.mix-track { background: #f5e8bd !important; }
+.mix-track span { background: linear-gradient(90deg,#e3bf72,#c49a45) !important; }
+.insight { border-left-color: #c49a45 !important; }
+.status-pill, .achievement, .unit, .manual-tag, .language-button, .language-button.selected, .quality-notes, .nepal-metric, .ai-message.assistant, .ai-message.user { border-color: #dfc27d !important; background: #fffaf0 !important; color: #ad7d2a !important; }
+.language-button.selected { background: #f5e8bd !important; color: #9d7020 !important; }
+.button, .upload-button { border-color: #c49a45 !important; background: #fff !important; color: #9d7020 !important; }
+.button.primary { border-color: #c49a45 !important; background: linear-gradient(135deg,#c49a45,#e4c26f) !important; color: #fff !important; box-shadow: 0 8px 18px rgba(196,154,69,.16); }
+.button:not(:disabled):hover, .upload-button:hover { border-color: #9d7020 !important; box-shadow: 0 8px 18px rgba(196,154,69,.18); }
+input, select, textarea { border-color: #dfc27d !important; background: #fff !important; color: #ad7d2a !important; }
+input:focus, select:focus, textarea:focus { border-color: #c49a45 !important; box-shadow: 0 0 0 3px rgba(196,154,69,.14) !important; }
+tbody tr:hover { background: #fffaf0 !important; box-shadow: inset 3px 0 #c49a45 !important; }
+.chart-grid { stroke: #f0dfb3 !important; }
+.next-step b { color: #9d7020 !important; }
+@media (max-width:680px) { .topbar { height: auto; } .hero { background: linear-gradient(135deg,#fffdf7,#f5e8bd) !important; } }
