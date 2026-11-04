@@ -1382,7 +1382,11 @@ input:focus{{outline:none;border-color:#c49a45;box-shadow:0 0 0 3px rgba(196,154
 button{{width:100%;margin-top:22px;padding:12px;border:0;border-radius:8px;
 background:linear-gradient(135deg,#c49a45,#e4c26f);color:white;font:inherit;font-weight:700;cursor:pointer;box-shadow:0 8px 18px rgba(196,154,69,.16)}}
 button:hover{{filter:brightness(1.04)}}
-</style></head><body><main><button id="pageLanguageToggle" type="button" aria-label="पेज की भाषा हिंदी में बदलें" style="width:auto;margin:0 0 18px;padding:8px 12px">हिन्दी</button><h1>Velnik MIS</h1>
+.login-brand{{display:flex;align-items:center;gap:10px;margin-bottom:18px}}
+.login-logo{{display:grid;place-items:center;width:44px;height:44px;border-radius:14px 14px 14px 4px;background:linear-gradient(135deg,#f4d887,#c39232);color:#fff;font:800 24px Georgia,serif;box-shadow:0 9px 22px rgba(195,146,50,.22)}}
+.login-brand span:last-child{{color:#26344a;font-weight:800;font-size:13px;letter-spacing:.08em}}
+#pageLanguageToggle{{float:right;width:auto!important;margin:0 0 18px!important;padding:7px 10px!important;border:1px solid #dfc27d!important;background:#fff!important;color:#b18639!important;font-size:12px!important}}
+</style></head><body><main><div class="login-brand"><span class="login-logo">V</span><span>VELNIK MIS</span></div><button id="pageLanguageToggle" type="button" aria-label="पेज की भाषा हिंदी में बदलें">हिन्दी</button><h1>Velnik MIS</h1>
 <p>Sign in with the owner account to view reports, upload workbooks, and update figures.</p>{message}
 <form method="post" action="/login" autocomplete="on">
 <label for="username">Username</label><input id="username" name="username" autocomplete="username" required>
