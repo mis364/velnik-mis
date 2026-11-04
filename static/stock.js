@@ -1,6 +1,8 @@
 const DATA = JSON.parse(document.getElementById('stock-data').textContent);
 const PAGE_SIZE = 25;
 let pageNumber = 0;
+let detailPageNumber = 0;
+const DETAIL_PAGE_SIZE = 25;
 const numberFormat = new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const amount = value => numberFormat.format(Number(value) || 0);
 const whole = value => new Intl.NumberFormat('en-IN').format(Number(value) || 0);
@@ -47,6 +49,38 @@ function renderDistributors() {
   document.getElementById('stockNextPage').disabled = pageNumber >= pageCount - 1;
 }
 
+function filteredStockDetails() {
+  const search = document.getElementById('stockDetailSearch')?.value.trim().toLowerCase() || '';
+  const state = document.getElementById('stockDetailStateFilter')?.value || '';
+  const product = document.getElementById('stockDetailProductFilter')?.value || '';
+  return (DATA.stateProductDetails || []).filter(row =>
+    (!state || row.state === state) &&
+    (!product || row.product === product) &&
+    (!search || `${row.state} ${row.product} ${row.sku} ${row.particulars} ${row.attribute}`.toLowerCase().includes(search))
+  );
+}
+
+function renderStockDetails() {
+  const rows = filteredStockDetails();
+  const pageCount = Math.max(1, Math.ceil(rows.length / DETAIL_PAGE_SIZE));
+  detailPageNumber = Math.min(detailPageNumber, pageCount - 1);
+  const begin = detailPageNumber * DETAIL_PAGE_SIZE;
+  const visible = rows.slice(begin, begin + DETAIL_PAGE_SIZE);
+  document.getElementById('stockDetailCount').textContent = `${whole(rows.length)} detailed rows`;
+  const summaryRows = DATA.stateProductSummary || [];
+  document.getElementById('stockDetailSummaryRows').innerHTML = summaryRows.length
+    ? summaryRows.map(row => `<tr><td>${safe(row.state)}</td><td>${safe(row.product)}</td><td>${safe(row.type)}</td><td class="num ${row.quantity < 0 ? 'negative-stock' : ''}">${amount(row.quantity)}</td><td class="num ${row.value < 0 ? 'negative-stock' : ''}">${amount(row.value)}</td></tr>`).join('')
+    : '<tr><td class="empty" colspan="5">No state and product summary is available.</td></tr>';
+  document.getElementById('stockDetailPageSummary').textContent = rows.length
+    ? `Showing ${whole(begin + 1)}–${whole(Math.min(begin + DETAIL_PAGE_SIZE, rows.length))} of ${whole(rows.length)}`
+    : 'No detailed stock rows match the filters.';
+  document.getElementById('stockDetailRows').innerHTML = visible.length
+    ? visible.map(row => `<tr><td>${safe(row.state || '—')}</td><td>${safe(row.product || '—')}</td><td><strong>${safe(row.sku || '—')}</strong><br><span class="muted small">${safe(row.particulars || '—')}</span></td><td>${safe(row.attribute || '—')}</td><td>${safe(row.type || '—')}</td><td class="num ${row.quantity < 0 ? 'negative-stock' : ''}">${amount(row.quantity)}</td><td class="num ${row.value < 0 ? 'negative-stock' : ''}">${amount(row.value)}</td></tr>`).join('')
+    : '<tr><td class="empty" colspan="7">No detailed stock rows match the filters.</td></tr>';
+  document.getElementById('stockDetailPrevPage').disabled = detailPageNumber === 0;
+  document.getElementById('stockDetailNextPage').disabled = detailPageNumber >= pageCount - 1;
+}
+
 function populateReport() {
   document.getElementById('stockContent').hidden = false;
   document.getElementById('stockEmpty').hidden = true;
@@ -72,6 +106,30 @@ function populateReport() {
   const stateFilter = document.getElementById('stockStateFilter');
   const states = DATA.stateColumns || [];
   stateFilter.innerHTML = '<option value="">All states / regions</option>' + states.map(state => `<option value="${safe(state)}">${safe(state)}</option>`).join('');
+  const detailRows = DATA.stateProductDetails || [];
+  const detailStates = [...new Set(detailRows.map(row => row.state).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+  const detailProducts = [...new Set(detailRows.map(row => row.product).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+  document.getElementById('stockDetailStateFilter').innerHTML = '<option value="">All states</option>' + detailStates.map(state => `<option value="${safe(state)}">${safe(state)}</option>`).join('');
+  document.getElementById('stockDetailProductFilter').innerHTML = '<option value="">All products</option>' + detailProducts.map(product => `<option value="${safe(product)}">${safe(product)}</option>`).join('');
+  document.getElementById('stockDetailSearch').addEventListener('input', () => { detailPageNumber = 0; renderStockDetails(); });
+  document.getElementById('stockDetailStateFilter').addEventListener('change', () => { detailPageNumber = 0; renderStockDetails(); });
+  document.getElementById('stockDetailProductFilter').addEventListener('change', () => { detailPageNumber = 0; renderStockDetails(); });
+  document.getElementById('stockDetailPrevPage').addEventListener('click', () => { detailPageNumber = Math.max(0, detailPageNumber - 1); renderStockDetails(); });
+  document.getElementById('stockDetailNextPage').addEventListener('click', () => { detailPageNumber++; renderStockDetails(); });
+  document.getElementById('downloadStockDetailCsv').addEventListener('click', () => {
+    const rows = filteredStockDetails();
+    const csv = SalesMISCsv.serialize([
+      ['State', 'Product', 'SKU', 'Particulars', 'Distributor / Attribute', 'Type', 'Quantity', 'Value'],
+      ...rows.map(row => [row.state, row.product, row.sku, row.particulars, row.attribute, row.type, row.quantity, row.value])
+    ]);
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(new Blob(['\uFEFF', csv], { type: 'text/csv;charset=utf-8' }));
+    link.download = 'state-wise-product-stock-detail.csv';
+    link.click();
+    URL.revokeObjectURL(link.href);
+  });
+  renderStockDetails();
+
   document.getElementById('stockSearch').addEventListener('input', () => { pageNumber = 0; renderDistributors(); });
   stateFilter.addEventListener('change', () => { pageNumber = 0; renderDistributors(); });
   document.getElementById('stockPrevPage').addEventListener('click', () => { pageNumber = Math.max(0, pageNumber - 1); renderDistributors(); });

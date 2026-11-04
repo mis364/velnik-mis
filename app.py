@@ -1114,6 +1114,46 @@ def build_stock_report(workbook_source, source_name="stock_latest.xlsx", loaded_
             for column in npd_columns
         )
 
+    state_product_details = []
+    state_product_summary_map = {}
+    if "Master Data" in book.sheet_names:
+        master_sheet = pd.read_excel(book, sheet_name="Master Data", header=1)
+        product_column = next((column for column in master_sheet.columns if str(column).strip().lower() in {"new product", "product", "item"}), None)
+        state_column = next((column for column in master_sheet.columns if str(column).strip().lower() in {"new state", "state"}), None)
+        quantity_column = next((column for column in master_sheet.columns if str(column).strip().lower() in {"quantity", "qty", "stock quantity"}), None)
+        value_column = next((column for column in master_sheet.columns if str(column).strip().lower() in {"value", "stock value", "amount", "total value", "grand total"}), None)
+        if not quantity_column and "New Value" in master_sheet.columns:
+            quantity_column = "New Value"
+        if not value_column and quantity_column:
+            value_column = quantity_column
+
+        if product_column and state_column and quantity_column:
+            detail_rows = master_sheet[
+                master_sheet[product_column].notna()
+                & master_sheet[state_column].notna()
+            ].copy()
+            detail_rows["_quantity"] = pd.to_numeric(detail_rows[quantity_column], errors="coerce").fillna(0.0)
+            detail_rows["_value"] = pd.to_numeric(detail_rows[value_column], errors="coerce").fillna(0.0) if value_column else detail_rows["_quantity"]
+            for _, row in detail_rows.iterrows():
+                detail = {
+                    "state": clean_text(row.get(state_column), "Unclassified"),
+                    "product": clean_text(row.get(product_column)),
+                    "sku": clean_text(row.get("SKU")),
+                    "particulars": clean_text(row.get("Particulars")),
+                    "attribute": clean_text(row.get("Attribute")),
+                    "type": clean_text(row.get("Type")),
+                    "quantity": number(row["_quantity"]),
+                    "value": number(row["_value"]),
+                }
+                state_product_details.append(detail)
+                key = (detail["state"], detail["product"], detail["type"] or "Unclassified")
+                if key not in state_product_summary_map:
+                    state_product_summary_map[key] = {"state": key[0], "product": key[1], "type": key[2], "quantity": 0.0, "value": 0.0}
+                state_product_summary_map[key]["quantity"] += detail["quantity"] or 0.0
+                state_product_summary_map[key]["value"] += detail["value"] or 0.0
+
+    state_product_summary = sorted(state_product_summary_map.values(), key=lambda item: (-item["quantity"], item["state"], item["product"]))
+
     negative_values = [item["negative"] for item in products if item["negative"] < 0]
     opening_label = clean_text(raw_stock.iloc[1, 0]) if len(raw_stock.index) > 1 else ""
     date_match = re.search(r"\d{1,2}-[A-Za-z]{3}-\d{2,4}", opening_label)
@@ -1134,6 +1174,8 @@ def build_stock_report(workbook_source, source_name="stock_latest.xlsx", loaded_
         "states": states,
         "stateColumns": [str(column) for column in state_columns],
         "stateProductRows": state_product_rows,
+        "stateProductDetails": state_product_details,
+        "stateProductSummary": state_product_summary,
         "distributors": distributors,
     }
 

@@ -20,6 +20,7 @@
       <a href="/billing-efficiency">Billing efficiency</a>
       <a href="#stock-summary">Stock summary</a>
       <a href="#stock-products">Products</a>
+      <a href="#stock-state-products">State + product</a>
       <a href="#stock-distributors">Distributors</a>
       <a href="#ai-analysis">Local analysis</a>
       __OWNER_NAV__
@@ -114,9 +115,32 @@
         </article>
       </section>
 
+      <section class="section" id="stock-state-products">
+        <div class="section-heading">
+          <div><p class="kicker">02 · STATE-WISE PRODUCT DETAIL</p><h2>Product quantity and value by state</h2><p class="muted">Detailed SKU, product, state, stock type, quantity, and stock value data from the Master Data sheet.</p></div>
+          <span class="status-pill" id="stockDetailCount"></span>
+        </div>
+        <article class="panel table-panel">
+          <div class="panel-heading"><div><h3>State + product summary</h3><p class="muted">Combined quantity and value for every state, product, and stock type.</p></div></div>
+          <div class="table-scroll">
+            <table><thead><tr><th>State</th><th>Product</th><th>Stock type</th><th class="num">Quantity</th><th class="num">Value</th></tr></thead><tbody id="stockDetailSummaryRows"></tbody></table>
+          </div>
+          <div class="table-tools">
+            <label class="search-label">Search product, SKU, or particulars<input id="stockDetailSearch" type="search" placeholder="Type to search"></label>
+            <label>State<select id="stockDetailStateFilter"><option value="">All states</option></select></label>
+            <label>Product<select id="stockDetailProductFilter"><option value="">All products</option></select></label>
+            <button class="button" id="downloadStockDetailCsv" type="button">Download detailed CSV</button>
+          </div>
+          <div class="table-scroll">
+            <table><thead><tr><th>State</th><th>Product</th><th>SKU / particulars</th><th>Distributor / attribute</th><th>Type</th><th class="num">Quantity</th><th class="num">Value</th></tr></thead><tbody id="stockDetailRows"></tbody></table>
+          </div>
+          <div class="table-footer"><span id="stockDetailPageSummary" aria-live="polite"></span><div class="pagination"><button class="button" id="stockDetailPrevPage" type="button">Previous</button><button class="button" id="stockDetailNextPage" type="button">Next</button></div></div>
+        </article>
+      </section>
+
       <section class="section" id="stock-distributors">
         <div class="section-heading">
-          <div><p class="kicker">02 · DISTRIBUTOR BALANCES</p><h2>Stock by distributor</h2><p class="muted">Select a state to download every product row from the uploaded State wise Stock sheet.</p></div>
+          <div><p class="kicker">03 · DISTRIBUTOR BALANCES</p><h2>Stock by distributor</h2><p class="muted">Select a state to download every product row from the uploaded State wise Stock sheet.</p></div>
           <span class="status-pill" id="stockDistributorCount"></span>
         </div>
         <article class="panel table-panel">
