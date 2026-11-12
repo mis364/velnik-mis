@@ -67,10 +67,21 @@ function renderStockDetails() {
   const begin = detailPageNumber * DETAIL_PAGE_SIZE;
   const visible = rows.slice(begin, begin + DETAIL_PAGE_SIZE);
   document.getElementById('stockDetailCount').textContent = `${whole(rows.length)} detailed rows`;
-  const summaryRows = DATA.stateProductSummary || [];
+  const filteredSummaryMap = {};
+  rows.forEach(row => {
+    const key = `${row.state}\u0000${row.product}\u0000${row.type || 'Unclassified'}`;
+    if (!filteredSummaryMap[key]) {
+      filteredSummaryMap[key] = { state: row.state, product: row.product, type: row.type || 'Unclassified', quantity: 0, value: 0 };
+    }
+    filteredSummaryMap[key].quantity += Number(row.quantity) || 0;
+    filteredSummaryMap[key].value += Number(row.value) || 0;
+  });
+  const summaryRows = Object.values(filteredSummaryMap).sort((a, b) =>
+    b.quantity - a.quantity || a.state.localeCompare(b.state) || a.product.localeCompare(b.product)
+  );
   document.getElementById('stockDetailSummaryRows').innerHTML = summaryRows.length
     ? summaryRows.map(row => `<tr><td>${safe(row.state)}</td><td>${safe(row.product)}</td><td>${safe(row.type)}</td><td class="num ${row.quantity < 0 ? 'negative-stock' : ''}">${amount(row.quantity)}</td><td class="num ${row.value < 0 ? 'negative-stock' : ''}">${amount(row.value)}</td></tr>`).join('')
-    : '<tr><td class="empty" colspan="5">No state and product summary is available.</td></tr>';
+    : '<tr><td class="empty" colspan="5">No state and product summary matches the filters.</td></tr>';
   document.getElementById('stockDetailPageSummary').textContent = rows.length
     ? `Showing ${whole(begin + 1)}–${whole(Math.min(begin + DETAIL_PAGE_SIZE, rows.length))} of ${whole(rows.length)}`
     : 'No detailed stock rows match the filters.';
@@ -179,6 +190,7 @@ if (uploadInput) uploadInput.addEventListener('change', async event => {
 
 if (DATA.available === false) {
   document.getElementById('stockEmpty').hidden = false;
+  if (DATA.error) document.getElementById('stockEmptyMessage').textContent = DATA.error;
 } else {
   populateReport();
 }

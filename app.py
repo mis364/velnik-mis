@@ -728,8 +728,9 @@ def get_column(columns, predicate):
     return None
 
 
-def calculate_executive_kpis(state_plan, net_total, period_end):
-    plan_total = sum((number(row.get("plan")) or 0.0) for row in state_plan)
+def calculate_executive_kpis(state_plan, net_total, period_end, plan_total_override=None):
+    calculated_plan_total = sum((number(row.get("plan")) or 0.0) for row in state_plan)
+    plan_total = number(plan_total_override) if number(plan_total_override) is not None else calculated_plan_total
     achievement_total = sum((number(row.get("achievement")) or 0.0) for row in state_plan)
     remaining_gap = max(0.0, plan_total - net_total)
     elapsed_days = max(1, period_end.day)
@@ -830,6 +831,7 @@ def build_report(workbook_source, source_name="latest.xlsx", loaded_at=None, man
         return result
 
     state_plan = []
+    plan_total_override = None
     state_plan_cols = (None, None, None)
     summary_date_header = ""
     nepal_manual = None
@@ -874,7 +876,10 @@ def build_report(workbook_source, source_name="latest.xlsx", loaded_at=None, man
                 state = clean_text(row[state_col])
                 plan = number(row[plan_col])
                 achievement = number(row[ach_col])
-                if state.lower() in {"", "nan", "total", "check"} or not plan or plan <= 0 or achievement is None:
+                if state.strip().lower() == "total":
+                    plan_total_override = plan
+                    continue
+                if state.lower() in {"", "nan", "check"} or not plan or plan <= 0 or achievement is None:
                     continue
                 state_plan.append({
                     "state": state,
@@ -966,7 +971,7 @@ def build_report(workbook_source, source_name="latest.xlsx", loaded_at=None, man
     tariff_col = "Tariff" if "Tariff" in month.columns else None
     missing_tariff = int(pd.to_numeric(month[tariff_col], errors="coerce").isna().sum()) if tariff_col else 0
     report_period = {"start": first_date.strftime("%Y-%m-%d"), "end": last_date.strftime("%Y-%m-%d")}
-    executive_kpis = calculate_executive_kpis(state_plan, net_total, last_date)
+    executive_kpis = calculate_executive_kpis(state_plan, net_total, last_date, plan_total_override)
 
     return {
         "source": source_name,
@@ -1115,17 +1120,16 @@ def build_stock_report(workbook_source, source_name="stock_latest.xlsx", loaded_
         )
 
     state_product_details = []
-    state_product_summary_map = {}
     if "Master Data" in book.sheet_names:
         master_sheet = pd.read_excel(book, sheet_name="Master Data", header=1)
         product_column = next((column for column in master_sheet.columns if str(column).strip().lower() in {"new product", "product", "item"}), None)
         state_column = next((column for column in master_sheet.columns if str(column).strip().lower() in {"new state", "state"}), None)
-        quantity_column = next((column for column in master_sheet.columns if str(column).strip().lower() in {"quantity", "qty", "stock quantity"}), None)
-        value_column = next((column for column in master_sheet.columns if str(column).strip().lower() in {"value", "stock value", "amount", "total value", "grand total"}), None)
-        if not quantity_column and "New Value" in master_sheet.columns:
-            quantity_column = "New Value"
-        if not value_column and quantity_column:
-            value_column = quantity_column
+        normalized_columns = {str(column).strip().lower(): column for column in master_sheet.columns}
+        quantity_column = next(
+            (normalized_columns[name] for name in ("quantity", "qty", "stock quantity") if name in normalized_columns),
+            normalized_columns.get("new value"),
+        )
+        value_column = next((normalized_columns[name] for name in ("value", "stock value", "amount", "total value", "grand total") if name in normalized_columns), None)
 
         if product_column and state_column and quantity_column:
             detail_rows = master_sheet[
@@ -1133,7 +1137,7 @@ def build_stock_report(workbook_source, source_name="stock_latest.xlsx", loaded_
                 & master_sheet[state_column].notna()
             ].copy()
             detail_rows["_quantity"] = pd.to_numeric(detail_rows[quantity_column], errors="coerce").fillna(0.0)
-            detail_rows["_value"] = pd.to_numeric(detail_rows[value_column], errors="coerce").fillna(0.0) if value_column else detail_rows["_quantity"]
+            detail_rows["_value"] = pd.to_numeric(detail_rows[value_column], errors="coerce").fillna(0.0) if value_column else 0.0
             for _, row in detail_rows.iterrows():
                 detail = {
                     "state": clean_text(row.get(state_column), "Unclassified"),
@@ -1146,18 +1150,11 @@ def build_stock_report(workbook_source, source_name="stock_latest.xlsx", loaded_
                     "value": number(row["_value"]),
                 }
                 state_product_details.append(detail)
-                key = (detail["state"], detail["product"], detail["type"] or "Unclassified")
-                if key not in state_product_summary_map:
-                    state_product_summary_map[key] = {"state": key[0], "product": key[1], "type": key[2], "quantity": 0.0, "value": 0.0}
-                state_product_summary_map[key]["quantity"] += detail["quantity"] or 0.0
-                state_product_summary_map[key]["value"] += detail["value"] or 0.0
-
-    state_product_summary = sorted(state_product_summary_map.values(), key=lambda item: (-item["quantity"], item["state"], item["product"]))
 
     negative_values = [item["negative"] for item in products if item["negative"] < 0]
     opening_label = clean_text(raw_stock.iloc[1, 0]) if len(raw_stock.index) > 1 else ""
     date_match = re.search(r"\d{1,2}-[A-Za-z]{3}-\d{2,4}", opening_label)
-    return {
+    report = {
         "source": source_name,
         "loadedAt": loaded_at or datetime.now().strftime("%Y-%m-%d %H:%M"),
         "reportDate": date_match.group(0) if date_match else opening_label,
@@ -1175,9 +1172,10 @@ def build_stock_report(workbook_source, source_name="stock_latest.xlsx", loaded_
         "stateColumns": [str(column) for column in state_columns],
         "stateProductRows": state_product_rows,
         "stateProductDetails": state_product_details,
-        "stateProductSummary": state_product_summary,
         "distributors": distributors,
     }
+    book.close()
+    return report
 
 
 def read_metadata():
@@ -1439,23 +1437,29 @@ button:hover{{filter:brightness(1.04)}}
     def _redirect(self, location):
         self.send_response(303)
         self.send_header("Location", location)
+        self._send_security_headers()
+        self.send_header("Content-Length", "0")
+        self.end_headers()
+
+    def _send_security_headers(self):
         self.send_header("Cache-Control", "no-store")
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("X-Frame-Options", "DENY")
         self.send_header("Referrer-Policy", "no-referrer")
         self.send_header("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=()")
-        self.send_header("Content-Length", "0")
-        self.end_headers()
+        self.send_header("X-Robots-Tag", "noindex, nofollow, noarchive")
+        self.send_header(
+            "Content-Security-Policy",
+            "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
+            "img-src 'self' data:; connect-src 'self'; font-src 'self'; object-src 'none'; "
+            "base-uri 'self'; form-action 'self'; frame-ancestors 'none'",
+        )
 
     def send_bytes(self, status, body, content_type):
         self.send_response(status)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(body)))
-        self.send_header("Cache-Control", "no-store")
-        self.send_header("X-Content-Type-Options", "nosniff")
-        self.send_header("X-Frame-Options", "DENY")
-        self.send_header("Referrer-Policy", "no-referrer")
-        self.send_header("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=()")
+        self._send_security_headers()
         self.end_headers()
         self.wfile.write(body)
 
@@ -1492,7 +1496,7 @@ button:hover{{filter:brightness(1.04)}}
             self.send_response(303)
             self.send_header("Location", "/login")
             self.send_header("Set-Cookie", self._cookie_attributes(0))
-            self.send_header("Cache-Control", "no-store")
+            self._send_security_headers()
             self.send_header("Content-Length", "0")
             self.end_headers()
             return
@@ -1533,9 +1537,7 @@ button:hover{{filter:brightness(1.04)}}
             self.send_header("Content-Type", "application/zip")
             self.send_header("Content-Disposition", f'attachment; filename="{filename}"')
             self.send_header("Content-Length", str(len(body)))
-            self.send_header("Cache-Control", "no-store")
-            self.send_header("X-Content-Type-Options", "nosniff")
-            self.send_header("Referrer-Policy", "no-referrer")
+            self._send_security_headers()
             self.end_headers()
             self.wfile.write(body)
             return
@@ -1566,8 +1568,17 @@ button:hover{{filter:brightness(1.04)}}
                 page = self._render_owner_controls(page)
                 return self.send_bytes(200, page.encode("utf-8"), "text/html; charset=utf-8")
             except Exception as exc:
-                body = ("<h1>Could not build the stock report</h1><p>" + str(exc) + "</p>").encode("utf-8")
-                return self.send_bytes(500, body, "text/html; charset=utf-8")
+                print(f"Stock report could not be built: {exc}", flush=True)
+                payload = {
+                    "available": False,
+                    "error": "The uploaded stock workbook could not be read. Please re-upload it or contact the administrator.",
+                }
+                template = (TEMPLATE_DIR / "stock.html").read_text(encoding="utf-8")
+                encoded = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).replace("</", "<\\/")
+                page = template.replace("__STOCK_DATA__", encoded)
+                page = page.replace("__STORAGE_STATUS__", persistent_storage_status())
+                page = self._render_owner_controls(page)
+                return self.send_bytes(200, page.encode("utf-8"), "text/html; charset=utf-8")
         if path == "/billing-efficiency":
             try:
                 payload = get_billing_efficiency_report() or {"available": False}
@@ -1584,10 +1595,10 @@ button:hover{{filter:brightness(1.04)}}
                 return self.send_bytes(200, page.encode("utf-8"), "text/html; charset=utf-8")
             except Exception as exc:
                 body = (
-                    "<h1>Could not build the billing efficiency report</h1><p>"
-                    + str(exc)
-                    + "</p>"
+                    "<h1>Could not build the billing efficiency report</h1>"
+                    "<p>Please try again or contact the administrator.</p>"
                 ).encode("utf-8")
+                print(f"Billing efficiency report could not be built: {exc}", flush=True)
                 return self.send_bytes(500, body, "text/html; charset=utf-8")
         if path != "/":
             return self.send_bytes(404, b"Not found", "text/plain; charset=utf-8")
@@ -1644,7 +1655,11 @@ button:hover{{filter:brightness(1.04)}}
             page = self._render_owner_controls(page)
             return self.send_bytes(200, page.encode("utf-8"), "text/html; charset=utf-8")
         except Exception as exc:
-            body = ("<h1>Could not build the report</h1><p>" + str(exc) + "</p>").encode("utf-8")
+            print(f"Sales report could not be built: {exc}", flush=True)
+            body = (
+                "<h1>Could not build the report</h1>"
+                "<p>Please try again or contact the administrator.</p>"
+            ).encode("utf-8")
             return self.send_bytes(500, body, "text/html; charset=utf-8")
 
     def do_POST(self):
@@ -1691,7 +1706,7 @@ button:hover{{filter:brightness(1.04)}}
                     else ""
                 ),
             )
-            self.send_header("Cache-Control", "no-store")
+            self._send_security_headers()
             self.send_header("Content-Length", "0")
             self.end_headers()
             return
@@ -1699,7 +1714,7 @@ button:hover{{filter:brightness(1.04)}}
             self.send_response(303)
             self.send_header("Location", "/login")
             self.send_header("Set-Cookie", self._cookie_attributes(0))
-            self.send_header("Cache-Control", "no-store")
+            self._send_security_headers()
             self.send_header("Content-Length", "0")
             self.end_headers()
             return
@@ -1761,7 +1776,11 @@ button:hover{{filter:brightness(1.04)}}
                 response = json.dumps({"ok": False, "error": str(exc)}).encode("utf-8")
                 return self.send_bytes(400, response, "application/json; charset=utf-8")
             except Exception as exc:
-                response = json.dumps({"ok": False, "error": str(exc)}).encode("utf-8")
+                print(f"Local analysis failed: {exc}", flush=True)
+                response = json.dumps({
+                    "ok": False,
+                    "error": "Analysis could not be completed. Please try again or contact the administrator.",
+                }).encode("utf-8")
                 return self.send_bytes(502, response, "application/json; charset=utf-8")
         if request_path == "/nepal-manual":
             try:
@@ -1819,7 +1838,11 @@ button:hover{{filter:brightness(1.04)}}
                 response = json.dumps({"ok": False, "error": str(exc)}).encode("utf-8")
                 return self.send_bytes(400, response, "application/json; charset=utf-8")
             except Exception as exc:
-                response = json.dumps({"ok": False, "error": "Nepal values could not be saved: " + str(exc)}).encode("utf-8")
+                print(f"Nepal figures could not be saved: {exc}", flush=True)
+                response = json.dumps({
+                    "ok": False,
+                    "error": "Nepal values could not be saved. Please try again or contact the administrator.",
+                }).encode("utf-8")
                 return self.send_bytes(500, response, "application/json; charset=utf-8")
 
         if request_path not in {
@@ -1908,7 +1931,11 @@ button:hover{{filter:brightness(1.04)}}
             response = json.dumps({"ok": False, "error": str(exc)}).encode("utf-8")
             return self.send_bytes(400, response, "application/json; charset=utf-8")
         except Exception as exc:
-            response = json.dumps({"ok": False, "error": "Upload failed: " + str(exc)}).encode("utf-8")
+            print(f"Workbook upload failed: {exc}", flush=True)
+            response = json.dumps({
+                "ok": False,
+                "error": "Upload failed. Please try again or contact the administrator.",
+            }).encode("utf-8")
             return self.send_bytes(500, response, "application/json; charset=utf-8")
 
     def log_message(self, fmt, *args):

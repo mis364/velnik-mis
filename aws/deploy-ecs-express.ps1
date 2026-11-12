@@ -191,6 +191,20 @@ $DataDirectory = Join-Path $RepositoryRoot "data"
 foreach ($FileName in $KnownDataFiles) {
     $LocalFile = Join-Path $DataDirectory $FileName
     if (Test-Path -LiteralPath $LocalFile -PathType Leaf) {
+        $ObjectKey = "velnik-mis/$FileName"
+        $HeadResult = aws s3api head-object `
+            --bucket $BucketName `
+            --key $ObjectKey `
+            --profile $Profile `
+            --region $Region 2>&1
+        $HeadExitCode = $LASTEXITCODE
+        if ($HeadExitCode -eq 0) {
+            Write-Host "Keeping existing S3 workbook data: $FileName"
+            continue
+        }
+        if (($HeadResult | Out-String) -notmatch "\(404\)|Not Found|NoSuchKey") {
+            throw "Could not check whether $FileName already exists in the private S3 bucket: $HeadResult"
+        }
         aws s3 cp $LocalFile "s3://${BucketName}/velnik-mis/${FileName}" --profile $Profile --region $Region
         if ($LASTEXITCODE -ne 0) {
             throw "Could not seed $FileName to the private S3 bucket."

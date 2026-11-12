@@ -37,6 +37,12 @@ Workbook data is synchronized between the container and S3:
 
 The app uses atomic local file replacement and uploads changed files before confirming success. Uploaded business workbooks and backup archives contain sensitive data and should remain private.
 
+## Browser and source-code privacy
+
+The app does not expose server-side Python files, templates, or the `data` directory through its HTTP routes. Report pages, workbook uploads, and backups require the owner session; S3 blocks public access. Responses are marked `noindex` and use a Content Security Policy as additional safeguards, not as access controls.
+
+HTML, CSS, and JavaScript required to render the website are sent to the browser and can always be inspected by visitors who can access that page. Do not put credentials, signing keys, or other secrets in templates or static assets. Minifying or disabling browser developer tools cannot make client-side code private.
+
 ## Workbook assumptions
 
 - Sales workbooks require `Raw` and `SS to DB Sale`; dated `Raw` headers are on row 2.

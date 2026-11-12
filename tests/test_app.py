@@ -31,6 +31,16 @@ class ExecutiveKpiTests(unittest.TestCase):
         self.assertEqual(kpis["projectedMonthEnd"], 60)
         self.assertEqual(kpis["forecastStatus"], "behind")
 
+    def test_uses_workbook_total_row_when_available(self):
+        kpis = app.calculate_executive_kpis(
+            [{"state": "UP", "plan": 2500, "achievement": 1720}],
+            1720,
+            pd.Timestamp("2026-10-31").to_pydatetime(),
+            7950,
+        )
+        self.assertEqual(kpis["planTotal"], 7950)
+        self.assertEqual(kpis["remainingGap"], 6230)
+
 
 class BillingEfficiencyReportTests(unittest.TestCase):
     def create_workbook(self, rows):
@@ -304,10 +314,47 @@ class AuthenticationTests(unittest.TestCase):
         self.assertTrue(header_map["Content-Type"].startswith("text/javascript"))
         self.assertEqual(header_map["X-Frame-Options"], "DENY")
         self.assertEqual(header_map["X-Content-Type-Options"], "nosniff")
+        self.assertEqual(header_map["X-Robots-Tag"], "noindex, nofollow, noarchive")
+        self.assertIn("script-src 'self'", header_map["Content-Security-Policy"])
 
     def test_static_asset_path_cannot_escape_static_directory(self):
         status, _, _ = self.request("GET", "/static/../app.py")
         self.assertEqual(status, 404)
+
+    def test_server_source_and_workbooks_are_not_routable(self):
+        for path in (
+            "/app.py",
+            "/persistent_storage.py",
+            "/templates/index.html",
+            "/data/latest.xlsx",
+            "/data/stock_latest.xlsx",
+        ):
+            with self.subTest(path=path):
+                status, _, body = self.request("GET", path)
+                self.assertEqual(status, 404)
+                self.assertNotIn(b"SALES_MIS_PASSWORD", body)
+
+    def test_unexpected_report_errors_do_not_reach_the_browser(self):
+        internal_detail = "C:\\private\\server\\source.py"
+        with patch.object(app, "get_report", side_effect=RuntimeError(internal_detail)):
+            status, headers, body = self.request(
+                "GET",
+                "/",
+                headers={"Cookie": self.owner_cookie()},
+            )
+        self.assertEqual(status, 500)
+        self.assertIn(b"Please try again", body)
+        self.assertNotIn(internal_detail.encode(), body)
+        self.assertEqual(dict(headers)["X-Robots-Tag"], "noindex, nofollow, noarchive")
+
+    def owner_cookie(self):
+        _, headers, _ = self.request(
+            "POST",
+            "/login",
+            body="username=owner&password=test-password",
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+        )
+        return dict(headers)["Set-Cookie"].split(";", 1)[0]
 
     def test_billing_efficiency_upload_accepts_macro_workbook_separately(self):
         workbook_bytes = BytesIO()
@@ -440,6 +487,40 @@ class ReplaceWorkbookTests(unittest.TestCase):
 
             self.assertEqual(destination.read_bytes(), b"old workbook")
             self.assertEqual([path.name for path in Path(directory).iterdir()], ["stock_latest.xlsx"])
+
+    def test_stock_master_data_does_not_copy_quantity_into_value(self):
+        with tempfile.TemporaryDirectory() as directory:
+            workbook = Path(directory) / "stock.xlsx"
+            with pd.ExcelWriter(workbook, engine="openpyxl") as writer:
+                pd.DataFrame([
+                    [None, None, None],
+                    [None, None, None],
+                    ["Type", "State", "Name"],
+                    ["CS", "UP", "Stock Point"],
+                ]).to_excel(writer, sheet_name="Stock", header=False, index=False)
+                pd.DataFrame([
+                    [None, None, None, None],
+                    [None, None, None, None],
+                    ["Item", "CS", "SS", "Grand Total"],
+                    ["Product A", 5, 2, 7],
+                ]).to_excel(writer, sheet_name="Item Stock CS & SS Stock", header=False, index=False)
+                pd.DataFrame([
+                    [None, None, None],
+                    [None, None, None],
+                    ["Item", "UP", "Grand Total"],
+                    ["Product A", 7, 7],
+                ]).to_excel(writer, sheet_name="State wise Stock", header=False, index=False)
+                pd.DataFrame([
+                    [None, None, None, None, None, None],
+                    ["New State", "New Product", "New Value", "State", "Type", "SKU"],
+                    ["UP", "Product A", 7, "UP", "CS", "SKU-1"],
+                ]).to_excel(writer, sheet_name="Master Data", header=False, index=False)
+
+            report = app.build_stock_report(workbook, source_name="stock.xlsx")
+
+            detail = report["stateProductDetails"][0]
+            self.assertEqual(detail["quantity"], 7)
+            self.assertEqual(detail["value"], 0)
 
 
 class LastYearWorkbookTests(unittest.TestCase):
