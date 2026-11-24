@@ -2,7 +2,9 @@ const DATA = JSON.parse(document.getElementById('stock-data').textContent);
 const PAGE_SIZE = 25;
 let pageNumber = 0;
 let detailPageNumber = 0;
+let detailSummaryPageNumber = 0;
 const DETAIL_PAGE_SIZE = 25;
+const DETAIL_SUMMARY_PAGE_SIZE = 25;
 const numberFormat = new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const amount = value => numberFormat.format(Number(value) || 0);
 const whole = value => new Intl.NumberFormat('en-IN').format(Number(value) || 0);
@@ -79,9 +81,18 @@ function renderStockDetails() {
   const summaryRows = Object.values(filteredSummaryMap).sort((a, b) =>
     b.quantity - a.quantity || a.state.localeCompare(b.state) || a.product.localeCompare(b.product)
   );
+  const summaryPageCount = Math.max(1, Math.ceil(summaryRows.length / DETAIL_SUMMARY_PAGE_SIZE));
+  detailSummaryPageNumber = Math.min(detailSummaryPageNumber, summaryPageCount - 1);
+  const summaryBegin = detailSummaryPageNumber * DETAIL_SUMMARY_PAGE_SIZE;
+  const visibleSummaryRows = summaryRows.slice(summaryBegin, summaryBegin + DETAIL_SUMMARY_PAGE_SIZE);
   document.getElementById('stockDetailSummaryRows').innerHTML = summaryRows.length
-    ? summaryRows.map(row => `<tr><td>${safe(row.state)}</td><td>${safe(row.product)}</td><td>${safe(row.type)}</td><td class="num ${row.quantity < 0 ? 'negative-stock' : ''}">${amount(row.quantity)}</td><td class="num ${row.value < 0 ? 'negative-stock' : ''}">${amount(row.value)}</td></tr>`).join('')
+    ? visibleSummaryRows.map(row => `<tr><td>${safe(row.state)}</td><td>${safe(row.product)}</td><td>${safe(row.type)}</td><td class="num ${row.quantity < 0 ? 'negative-stock' : ''}">${amount(row.quantity)}</td><td class="num ${row.value < 0 ? 'negative-stock' : ''}">${amount(row.value)}</td></tr>`).join('')
     : '<tr><td class="empty" colspan="5">No state and product summary matches the filters.</td></tr>';
+  document.getElementById('stockDetailSummaryPageSummary').textContent = summaryRows.length
+    ? `Showing ${whole(summaryBegin + 1)}–${whole(Math.min(summaryBegin + DETAIL_SUMMARY_PAGE_SIZE, summaryRows.length))} of ${whole(summaryRows.length)}`
+    : 'No state and product summary matches the filters.';
+  document.getElementById('stockDetailSummaryPrevPage').disabled = detailSummaryPageNumber === 0;
+  document.getElementById('stockDetailSummaryNextPage').disabled = detailSummaryPageNumber >= summaryPageCount - 1;
   document.getElementById('stockDetailPageSummary').textContent = rows.length
     ? `Showing ${whole(begin + 1)}–${whole(Math.min(begin + DETAIL_PAGE_SIZE, rows.length))} of ${whole(rows.length)}`
     : 'No detailed stock rows match the filters.';
@@ -122,9 +133,11 @@ function populateReport() {
   const detailProducts = [...new Set(detailRows.map(row => row.product).filter(Boolean))].sort((a, b) => a.localeCompare(b));
   document.getElementById('stockDetailStateFilter').innerHTML = '<option value="">All states</option>' + detailStates.map(state => `<option value="${safe(state)}">${safe(state)}</option>`).join('');
   document.getElementById('stockDetailProductFilter').innerHTML = '<option value="">All products</option>' + detailProducts.map(product => `<option value="${safe(product)}">${safe(product)}</option>`).join('');
-  document.getElementById('stockDetailSearch').addEventListener('input', () => { detailPageNumber = 0; renderStockDetails(); });
-  document.getElementById('stockDetailStateFilter').addEventListener('change', () => { detailPageNumber = 0; renderStockDetails(); });
-  document.getElementById('stockDetailProductFilter').addEventListener('change', () => { detailPageNumber = 0; renderStockDetails(); });
+  document.getElementById('stockDetailSearch').addEventListener('input', () => { detailPageNumber = 0; detailSummaryPageNumber = 0; renderStockDetails(); });
+  document.getElementById('stockDetailStateFilter').addEventListener('change', () => { detailPageNumber = 0; detailSummaryPageNumber = 0; renderStockDetails(); });
+  document.getElementById('stockDetailProductFilter').addEventListener('change', () => { detailPageNumber = 0; detailSummaryPageNumber = 0; renderStockDetails(); });
+  document.getElementById('stockDetailSummaryPrevPage').addEventListener('click', () => { detailSummaryPageNumber = Math.max(0, detailSummaryPageNumber - 1); renderStockDetails(); });
+  document.getElementById('stockDetailSummaryNextPage').addEventListener('click', () => { detailSummaryPageNumber++; renderStockDetails(); });
   document.getElementById('stockDetailPrevPage').addEventListener('click', () => { detailPageNumber = Math.max(0, detailPageNumber - 1); renderStockDetails(); });
   document.getElementById('stockDetailNextPage').addEventListener('click', () => { detailPageNumber++; renderStockDetails(); });
   document.getElementById('downloadStockDetailCsv').addEventListener('click', () => {

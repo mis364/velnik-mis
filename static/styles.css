@@ -398,3 +398,14 @@ tbody tr:hover { background: #fffaf0 !important; box-shadow: inset 3px 0 var(--g
 .live-dot { background: var(--gold) !important; box-shadow: 0 0 0 0 rgba(195,146,50,.4); }
 .nepal-metric { background: linear-gradient(135deg,#fff,#fbf7e9) !important; }
 @media (max-width:680px) { .topbar { height: auto; } .hero { background: linear-gradient(135deg,#fff,#fbf7e9) !important; } }
+
+/* Keep report content visible and tables printable on every report page. */
+@media print {
+  .reveal { opacity: 1 !important; transform: none !important; }
+  .topbar { position: static !important; }
+  .table-scroll { overflow: visible !important; }
+  .section, .panel { break-inside: auto; page-break-inside: auto; }
+  table { break-inside: auto; page-break-inside: auto; }
+  thead { display: table-header-group; }
+  tr { break-inside: avoid; page-break-inside: avoid; }
+}
