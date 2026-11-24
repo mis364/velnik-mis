@@ -2,6 +2,8 @@
 
 A password-protected sales, stock, weekly, billing-efficiency, and year-over-year reporting webpage. The application runs in AWS ECS and stores workbook data in private Amazon S3 storage through the ECS task IAM role. It does not use AWS access keys, Google Drive, Render, or Cloud Run.
 
+The sales, stock, and billing pages include expandable guides that explain the source and meaning of each report section. Billing efficiency also supports a month-to-month comparison of sales, distributor coverage, efficiency, and state-level changes.
+
 ## AWS deployment
 
 Use the deployment script from PowerShell:

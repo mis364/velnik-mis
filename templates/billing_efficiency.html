@@ -17,8 +17,10 @@
     <nav aria-label="Main navigation">
       <a href="/">Sales report</a>
       <a href="/stock">Stock report</a>
+      <a href="#report-guide">How to read</a>
       <a href="#billing-summary">Summary</a>
       <a href="#monthly-trend">Monthly trend</a>
+      <a href="#month-comparison">Compare months</a>
       <a href="#billing-states">State / zone</a>
       <a href="#billing-team">Representatives</a>
       <a href="#billing-products">Products</a>
@@ -39,6 +41,20 @@
       <div class="as-of"><span>FINANCIAL YEAR</span><strong>Apr 2026 – Mar 2027</strong><small id="billingLoadedAt">Latest workbook loaded: —</small></div>
     </section>
     <p class="muted small storage-status">__STORAGE_STATUS__</p>
+
+    <section class="section" id="report-guide">
+      <details class="panel report-guide">
+        <summary><span>How to read billing efficiency</span><span class="muted small">Definitions, workbook measures, and follow-up guidance</span></summary>
+        <div class="guide-grid">
+          <article><h3>Selected month summary</h3><p>The month selector changes the summary cards and the state, zone, representative, product, and zero-billing details.</p></article>
+          <article><h3>Billing efficiency</h3><p>Efficiency is billed active distributor codes divided by active distributor codes. A billed distributor has positive Value In Lacs for that month.</p></article>
+          <article><h3>Monthly trend</h3><p>Each row shows one workbook month. Compare sales and distributor coverage together; a larger sales total does not always mean more distributors billed.</p></article>
+          <article><h3>State, zone, and representative</h3><p>Sales and coverage are grouped using the labels in the billing workbook. Representative assignment uses its Res SR/SO Name field.</p></article>
+          <article><h3>Product billing coverage</h3><p>Coverage counts active distributors with a positive value in each product column. Product amounts are omitted because the workbook does not define their unit.</p></article>
+          <article><h3>Active distributors without positive billing</h3><p>This follow-up list includes active codes with zero or negative net billing in the selected month. Confirm the workbook row and current account status before acting.</p></article>
+        </div>
+      </details>
+    </section>
 
     <!--OWNER-ONLY--><section class="section" id="billing-upload">
       <article class="refresh-panel">
@@ -70,6 +86,21 @@
         <div class="section-heading"><div><p class="kicker">01 · MONTHLY TREND</p><h2>Billing coverage by month</h2><p class="muted">Efficiency is active distributors with positive Value In Lacs divided by active distributor codes.</p></div><span class="unit">LAKH · %</span></div>
         <article class="panel table-panel">
           <div class="table-scroll"><table><thead><tr><th>Month</th><th class="num">Sales (lakh)</th><th class="num">Active DBs</th><th class="num">Billed active DBs</th><th class="num">Active zero billing</th><th class="num">Efficiency</th></tr></thead><tbody id="billingMonthlyRows"></tbody></table></div>
+        </article>
+      </section>
+
+      <section class="section" id="month-comparison">
+        <div class="section-heading"><div><p class="kicker">MONTH · CHANGE</p><h2>Compare two months</h2><p class="muted">Compare billing, distributor coverage, and efficiency using the same workbook measures.</p></div></div>
+        <article class="panel period-comparison-panel">
+          <div class="month-comparison-controls">
+            <label>First month<select id="billingCompareMonthA"></select></label>
+            <label>Second month<select id="billingCompareMonthB"></select></label>
+          </div>
+          <p class="muted small" id="billingCompareCaption" aria-live="polite"></p>
+          <div id="billingComparisonSummary" class="comparison-summary"></div>
+          <div class="table-scroll">
+            <table><thead><tr><th>State / region</th><th class="num" id="billingCompareHeadA">First month sales</th><th class="num" id="billingCompareHeadB">Second month sales</th><th class="num">Change (lakh)</th><th class="num">Change %</th></tr></thead><tbody id="billingComparisonRows"></tbody></table>
+          </div>
         </article>
       </section>
 

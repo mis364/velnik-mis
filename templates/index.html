@@ -18,6 +18,7 @@
     <a class="brand" href="#top"><span class="brand-mark">V</span><span>VELNIK MIS</span></a>
     <nav aria-label="Main navigation">
       <a href="#snapshot">Snapshot</a>
+      <a href="#report-guide">How to read</a>
       <a href="#period-comparison">Period comparison</a>
       <a href="#year-comparison">Year-over-year</a>
       <a href="#state-billing">State billing</a>
@@ -46,6 +47,21 @@
       <div class="as-of"><span>REPORT PERIOD</span><strong id="periodLabel">—</strong><small id="sourceLoadedAt">Latest workbook loaded: —</small></div>
     </section>
     <p class="muted small storage-status">__STORAGE_STATUS__</p>
+
+    <section class="section" id="report-guide">
+      <details class="panel report-guide">
+        <summary><span>How to read the sales report</span><span class="muted small">Definitions, sources, and how the sections relate</span></summary>
+        <div class="guide-grid">
+          <article><h3>Business pulse</h3><p>Headline sales, plan, growth, and quality figures. Date filters update the sales measures for the selected range.</p></article>
+          <article><h3>Period comparisons</h3><p>Current vs previous compares equal-length date ranges. Year-over-year compares matching calendar dates from the separate prior-year workbook.</p></article>
+          <article><h3>Sales snapshot and state billing</h3><p>The daily chart and state totals use dated sales without GST, shown in lakh. Per-capita billing divides state billing by an estimated population.</p></article>
+          <article><h3>Weekly performance</h3><p>Weekly plan, achievement, and balance come from the separate weekly plan workbook. They are not recalculated from the selected daily date range.</p></article>
+          <article><h3>Nepal sales</h3><p>Manually maintained summary figures are shown separately from dated transactions. The report checks whether those figures are already included before adding them to totals.</p></article>
+          <article><h3>Action points and product mix</h3><p>Action points flag patterns to review; they do not explain the cause. Product mix ranks sales by product for the selected date range.</p></article>
+          <article><h3>Zero-billing distributors</h3><p>This list follows the workbook's Zero Billing DB flag. Confirm distributor status and the latest billing with the representative before follow-up.</p></article>
+        </div>
+      </details>
+    </section>
 
     <section class="section" id="recurring">
       <div class="section-heading"><div><p class="kicker">DAILY WORKBOOK</p><h2>Upload today's sales workbook</h2><p class="muted">The latest uploaded workbook is shown automatically when you open this page. Upload today's .xlsx file to refresh the report.</p></div></div>

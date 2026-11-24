@@ -75,6 +75,53 @@ function renderSelectedMonth() {
   renderZeroBilling();
 }
 
+function renderMonthComparison() {
+  const monthA = document.getElementById('billingCompareMonthA').value;
+  const monthB = document.getElementById('billingCompareMonthB').value;
+  const first = DATA.monthly.find(row => row.month === monthA);
+  const second = DATA.monthly.find(row => row.month === monthB);
+  const summaryTarget = document.getElementById('billingComparisonSummary');
+  const rowsTarget = document.getElementById('billingComparisonRows');
+  const caption = document.getElementById('billingCompareCaption');
+  document.getElementById('billingCompareHeadA').textContent = `${monthA} sales (lakh)`;
+  document.getElementById('billingCompareHeadB').textContent = `${monthB} sales (lakh)`;
+  caption.textContent = 'Change is second month minus first month. The table shows the 10 largest state / region changes by absolute value. Percentage change is not shown when first-month sales are zero.';
+  if (!first || !second) {
+    summaryTarget.innerHTML = '';
+    rowsTarget.innerHTML = '<tr><td class="empty" colspan="5">Choose two months with data to compare.</td></tr>';
+    return;
+  }
+
+  const signedAmount = value => `${value > 0 ? '+' : ''}${amount(value)}`;
+  const signedWhole = value => `${value > 0 ? '+' : ''}${whole(value)}`;
+  const signedPercent = value => `${value > 0 ? '+' : ''}${amount(value)} pp`;
+  const metrics = [
+    ['Billing sales', `${amount(first.salesLakh)} lakh`, `${amount(second.salesLakh)} lakh`, `${signedAmount(second.salesLakh - first.salesLakh)} lakh`],
+    ['Billed active DBs', whole(first.billedActiveDbCount), whole(second.billedActiveDbCount), signedWhole(second.billedActiveDbCount - first.billedActiveDbCount)],
+    ['Billing efficiency', `${amount(first.efficiencyPct)}%`, `${amount(second.efficiencyPct)}%`, signedPercent(second.efficiencyPct - first.efficiencyPct)],
+    ['Active zero billing', whole(first.zeroBillingActiveDbCount), whole(second.zeroBillingActiveDbCount), signedWhole(second.zeroBillingActiveDbCount - first.zeroBillingActiveDbCount)],
+  ];
+  summaryTarget.innerHTML = metrics.map(([label, valueA, valueB, change]) =>
+    `<article class="stat"><span class="stat-label">${safe(label)} · ${safe(monthA)} → ${safe(monthB)}</span><strong class="stat-value">${safe(valueA)} → ${safe(valueB)}</strong><span class="stat-note">Change: ${safe(change)}</span></article>`
+  ).join('');
+
+  const byState = new Map();
+  for (const row of DATA.states) {
+    if (row.month !== monthA && row.month !== monthB) continue;
+    const state = row.state || 'Unclassified';
+    const current = byState.get(state) || { state, salesA: 0, salesB: 0 };
+    if (row.month === monthA) current.salesA = Number(row.salesLakh) || 0;
+    if (row.month === monthB) current.salesB = Number(row.salesLakh) || 0;
+    byState.set(state, current);
+  }
+  const states = [...byState.values()].map(row => ({ ...row, change: row.salesB - row.salesA }))
+    .sort((left, right) => Math.abs(right.change) - Math.abs(left.change) || left.state.localeCompare(right.state))
+    .slice(0, 10);
+  rowsTarget.innerHTML = states.length
+    ? states.map(row => `<tr><td>${safe(row.state)}</td><td class="num">${amount(row.salesA)}</td><td class="num">${amount(row.salesB)}</td><td class="num ${row.change < 0 ? 'gap' : ''}">${signedAmount(row.change)}</td><td class="num">${row.salesA ? `${row.change > 0 ? '+' : ''}${amount(row.change / row.salesA * 100)}%` : '—'}</td></tr>`).join('')
+    : '<tr><td class="empty" colspan="5">No state / region sales are available for these months.</td></tr>';
+}
+
 function populateReport() {
   document.getElementById('billingContent').hidden = false;
   document.getElementById('billingEmpty').hidden = true;
@@ -86,6 +133,13 @@ function populateReport() {
   const monthFilter = document.getElementById('billingMonthFilter');
   monthFilter.innerHTML = DATA.months.map(month => `<option value="${safe(month)}">${safe(month)}</option>`).join('');
   monthFilter.value = DATA.months[DATA.months.length - 1];
+  const compareOptions = DATA.months.map(month => `<option value="${safe(month)}">${safe(month)}</option>`).join('');
+  const compareMonthA = document.getElementById('billingCompareMonthA');
+  const compareMonthB = document.getElementById('billingCompareMonthB');
+  compareMonthA.innerHTML = compareOptions;
+  compareMonthB.innerHTML = compareOptions;
+  compareMonthA.value = DATA.months[Math.max(0, DATA.months.length - 2)];
+  compareMonthB.value = DATA.months[DATA.months.length - 1];
   document.getElementById('billingMonthlyRows').innerHTML = DATA.monthly.map(row =>
     `<tr><td>${safe(row.month)}</td><td class="num">${amount(row.salesLakh)}</td><td class="num">${whole(row.activeDbCount)}</td><td class="num">${whole(row.billedActiveDbCount)}</td><td class="num">${whole(row.zeroBillingActiveDbCount)}</td><td class="num">${amount(row.efficiencyPct)}%</td></tr>`
   ).join('');
@@ -96,6 +150,8 @@ function populateReport() {
     `Data checks: ${whole(DATA.quality.sourceRows)} source rows · ${whole(DATA.quality.duplicateDistributorMonthRows)} duplicate distributor-month rows · ${whole(DATA.quality.missingSalesValues)} missing sales values · ${whole(DATA.quality.productCount)} product columns.`;
 
   monthFilter.addEventListener('change', renderSelectedMonth);
+  compareMonthA.addEventListener('change', renderMonthComparison);
+  compareMonthB.addEventListener('change', renderMonthComparison);
   document.getElementById('zeroBillingStateFilter').addEventListener('change', () => { pageNumber = 0; renderZeroBilling(); });
   document.getElementById('zeroBillingSearch').addEventListener('input', () => { pageNumber = 0; renderZeroBilling(); });
   document.getElementById('zeroBillingPrev').addEventListener('click', () => { pageNumber = Math.max(0, pageNumber - 1); renderZeroBilling(); });
@@ -120,6 +176,7 @@ function populateReport() {
     URL.revokeObjectURL(link.href);
   });
   renderSelectedMonth();
+  renderMonthComparison();
 }
 
 const uploadInput = document.getElementById('billingWorkbookFile');

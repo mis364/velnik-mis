@@ -18,6 +18,7 @@
     <nav aria-label="Main navigation">
       <a href="/">Sales report</a>
       <a href="/billing-efficiency">Billing efficiency</a>
+      <a href="#report-guide">How to read</a>
       <a href="#stock-summary">Stock summary</a>
       <a href="#stock-products">Products</a>
       <a href="#stock-state-products">State + product</a>
@@ -39,6 +40,18 @@
       <div class="as-of"><span>STOCK AS OF</span><strong id="stockDate">—</strong></div>
     </section>
     <p class="muted small storage-status">__STORAGE_STATUS__</p>
+
+    <section class="section" id="report-guide">
+      <details class="panel report-guide">
+        <summary><span>How to read the stock report</span><span class="muted small">Definitions, sources, and important distinctions</span></summary>
+        <div class="guide-grid">
+          <article><h3>Stock summary</h3><p>Total, CS, and SS values come from Item Stock CS &amp; SS Stock. NPD is reported separately and is not added to the product totals.</p></article>
+          <article><h3>Stock by product</h3><p>Product balances are ranked by workbook total. Negative stock counts and amounts are shown as recorded in the source workbook.</p></article>
+          <article><h3>State and product detail</h3><p>SKU-level quantity and value rows come from Master Data. Search and filters update both the grouped summary and detailed rows; the detailed CSV follows those filters.</p></article>
+          <article><h3>Stock by distributor</h3><p>Distributor balances are summarized from the Stock sheet. The CSV download comes from State wise Stock and includes product rows for the selected state.</p></article>
+        </div>
+      </details>
+    </section>
 
     <section class="section" id="ai-analysis">
       <div class="section-heading">
