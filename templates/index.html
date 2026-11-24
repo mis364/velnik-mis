@@ -17,20 +17,9 @@
   <header class="topbar">
     <a class="brand" href="#top"><span class="brand-mark">V</span><span>VELNIK MIS</span></a>
     <nav aria-label="Main navigation">
-      <a href="#snapshot">Snapshot</a>
-      <a href="#report-guide">How to read</a>
-      <a href="#period-comparison">Period comparison</a>
-      <a href="#year-comparison">Year-over-year</a>
-      <a href="#state-billing">State billing</a>
-      <a href="#weekly">Weekly</a>
-      <a href="#nepal">Nepal</a>
-      <a href="#improve">Analysis</a>
-      <a href="#ai-analysis">Local analysis</a>
-      <a href="#products">Products</a>
-      <a href="#distributors">Distributors</a>
+      <a href="#top" aria-current="page">Sales overview</a>
       <a href="/stock">Stock report</a>
       <a href="/billing-efficiency">Billing efficiency</a>
-      <a href="#recurring">Daily upload</a>
       __OWNER_NAV__
     </nav>
     <button class="button language-toggle" id="pageLanguageToggle" type="button" aria-label="पेज की भाषा हिंदी में बदलें">हिन्दी</button>
@@ -47,6 +36,17 @@
       <div class="as-of"><span>REPORT PERIOD</span><strong id="periodLabel">—</strong><small id="sourceLoadedAt">Latest workbook loaded: —</small></div>
     </section>
     <p class="muted small storage-status">__STORAGE_STATUS__</p>
+
+    <section class="section report-map" id="report-map" aria-label="Key report sections">
+      <div class="report-map-heading"><div><p class="kicker">START HERE</p><h2>Key sections</h2><p class="muted">Open the main decision views first, or choose another section below.</p></div></div>
+      <div class="report-shortcuts">
+        <a class="report-shortcut" href="#executive-pulse"><span class="shortcut-number">01</span><strong>Business pulse</strong><small>Key sales and plan measures</small></a>
+        <a class="report-shortcut" href="#snapshot"><span class="shortcut-number">02</span><strong>Sales snapshot</strong><small>Daily movement and date range</small></a>
+        <a class="report-shortcut" href="#period-comparison"><span class="shortcut-number">03</span><strong>Period comparison</strong><small>Current vs previous range</small></a>
+        <a class="report-shortcut" href="#state-billing"><span class="shortcut-number">04</span><strong>State billing</strong><small>Territory sales and rankings</small></a>
+        <details class="more-sections"><summary>More sections <span class="muted">Weekly · products · follow-up · tools</span></summary><div class="more-section-links"><a href="#year-comparison">Year-over-year</a><a href="#weekly">Weekly performance</a><a href="#nepal">Nepal sales</a><a href="#improve">Action points and data checks</a><a href="#products">Product mix</a><a href="#distributors">Zero-billing distributors</a><a href="#ai-analysis">Local analysis</a><a href="#recurring">Workbook upload</a><a href="#report-guide">How to read this report</a></div></details>
+      </div>
+    </section>
 
     <section class="section" id="report-guide">
       <details class="panel report-guide">
@@ -104,7 +104,7 @@
       </article>
     </section>
 
-    <section class="section executive-section" aria-labelledby="executiveKpiTitle">
+    <section class="section executive-section" id="executive-pulse" aria-labelledby="executiveKpiTitle">
       <div class="section-heading"><div><p class="kicker">EXECUTIVE · MTD</p><h2 id="executiveKpiTitle">Business pulse</h2><p class="muted">Plan, achievement, forecast, growth, and data-quality indicators in one view.</p></div></div>
       <section class="stats" id="stats" aria-label="Executive key sales figures"></section>
     </section>

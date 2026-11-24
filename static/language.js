@@ -1,5 +1,12 @@
 (() => {
   const translations = new Map(Object.entries({
+    'Sales overview': 'बिक्री अवलोकन',
+    'Stock overview': 'स्टॉक अवलोकन',
+    'Billing overview': 'बिलिंग अवलोकन',
+    'START HERE': 'यहाँ से शुरू करें',
+    'Key sections': 'मुख्य अनुभाग',
+    'More sections': 'अधिक अनुभाग',
+    'How to read this report': 'इस रिपोर्ट को कैसे पढ़ें',
     'Main navigation': 'मुख्य नेविगेशन',
     Snapshot: 'स्नैपशॉट',
     'Period comparison': 'अवधि तुलना',

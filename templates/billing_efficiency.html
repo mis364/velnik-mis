@@ -17,14 +17,7 @@
     <nav aria-label="Main navigation">
       <a href="/">Sales report</a>
       <a href="/stock">Stock report</a>
-      <a href="#report-guide">How to read</a>
-      <a href="#billing-summary">Summary</a>
-      <a href="#monthly-trend">Monthly trend</a>
-      <a href="#month-comparison">Compare months</a>
-      <a href="#billing-states">State / zone</a>
-      <a href="#billing-team">Representatives</a>
-      <a href="#billing-products">Products</a>
-      <a href="#zero-billing">Zero billing</a>
+      <a href="#top" aria-current="page">Billing overview</a>
       __OWNER_NAV__
     </nav>
     <button class="button language-toggle" id="pageLanguageToggle" type="button" aria-label="पेज की भाषा हिंदी में बदलें">हिन्दी</button>
@@ -41,6 +34,17 @@
       <div class="as-of"><span>FINANCIAL YEAR</span><strong>Apr 2026 – Mar 2027</strong><small id="billingLoadedAt">Latest workbook loaded: —</small></div>
     </section>
     <p class="muted small storage-status">__STORAGE_STATUS__</p>
+
+    <section class="section report-map" id="report-map" aria-label="Key report sections">
+      <div class="report-map-heading"><div><p class="kicker">START HERE</p><h2>Key sections</h2><p class="muted">Review the month, compare trends, then explore territory and follow-up.</p></div></div>
+      <div class="report-shortcuts">
+        <a class="report-shortcut" href="#billing-summary"><span class="shortcut-number">01</span><strong>Month summary</strong><small>Sales and billing coverage</small></a>
+        <a class="report-shortcut" href="#monthly-trend"><span class="shortcut-number">02</span><strong>Monthly trend</strong><small>Sales and active DBs by month</small></a>
+        <a class="report-shortcut" href="#month-comparison"><span class="shortcut-number">03</span><strong>Compare months</strong><small>Changes in billing and reach</small></a>
+        <a class="report-shortcut" href="#billing-states"><span class="shortcut-number">04</span><strong>Territory</strong><small>State and zone performance</small></a>
+        <details class="more-sections"><summary>More sections <span class="muted">Team · products · follow-up</span></summary><div class="more-section-links"><a href="#billing-team">Representative performance</a><a href="#billing-products">Product coverage</a><a href="#zero-billing">Zero-billing follow-up</a><a href="#report-guide">How to read this report</a><a href="#billing-upload">Workbook upload</a></div></details>
+      </div>
+    </section>
 
     <section class="section" id="report-guide">
       <details class="panel report-guide">

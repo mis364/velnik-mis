@@ -1,4 +1,14 @@
 const DATA = JSON.parse(document.getElementById('report-data').textContent);
+const reportMap = document.getElementById('report-map');
+if (reportMap) {
+  const prioritySections = [
+    document.getElementById('executive-pulse'),
+    document.getElementById('snapshot'),
+    document.getElementById('period-comparison'),
+    document.getElementById('report-guide'),
+  ].filter(Boolean);
+  reportMap.after(...prioritySections);
+}
 if (!DATA.available) {
   document.body.classList.add('no-sales-workbook');
   document.querySelectorAll('main.page > section:not(.hero):not(#recurring)').forEach(section => {

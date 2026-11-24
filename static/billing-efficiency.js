@@ -123,6 +123,10 @@ function renderMonthComparison() {
 }
 
 function populateReport() {
+  const reportMap = document.getElementById('report-map');
+  const reportContent = document.getElementById('billingContent');
+  const reportGuide = document.getElementById('report-guide');
+  if (reportMap && reportContent && reportGuide) reportMap.after(reportContent, reportGuide);
   document.getElementById('billingContent').hidden = false;
   document.getElementById('billingEmpty').hidden = true;
   document.getElementById('billingSource').textContent = DATA.source;
@@ -202,6 +206,7 @@ if (uploadInput) uploadInput.addEventListener('change', async event => {
 });
 
 if (DATA.available === false) {
+  document.getElementById('report-map').hidden = true;
   document.getElementById('billingEmpty').hidden = false;
 } else {
   populateReport();

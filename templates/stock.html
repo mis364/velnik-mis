@@ -18,12 +18,7 @@
     <nav aria-label="Main navigation">
       <a href="/">Sales report</a>
       <a href="/billing-efficiency">Billing efficiency</a>
-      <a href="#report-guide">How to read</a>
-      <a href="#stock-summary">Stock summary</a>
-      <a href="#stock-products">Products</a>
-      <a href="#stock-state-products">State + product</a>
-      <a href="#stock-distributors">Distributors</a>
-      <a href="#ai-analysis">Local analysis</a>
+      <a href="#top" aria-current="page">Stock overview</a>
       __OWNER_NAV__
     </nav>
     <button class="button language-toggle" id="pageLanguageToggle" type="button" aria-label="पेज की भाषा हिंदी में बदलें">हिन्दी</button>
@@ -40,6 +35,16 @@
       <div class="as-of"><span>STOCK AS OF</span><strong id="stockDate">—</strong></div>
     </section>
     <p class="muted small storage-status">__STORAGE_STATUS__</p>
+
+    <section class="section report-map" id="report-map" aria-label="Key report sections">
+      <div class="report-map-heading"><div><p class="kicker">START HERE</p><h2>Key sections</h2><p class="muted">Start with the stock summary, then open the detail you need.</p></div></div>
+      <div class="report-shortcuts">
+        <a class="report-shortcut" href="#stock-summary"><span class="shortcut-number">01</span><strong>Stock summary</strong><small>Total, CS, SS, and NPD</small></a>
+        <a class="report-shortcut" href="#stock-products"><span class="shortcut-number">02</span><strong>Stock by product</strong><small>Product balances and negatives</small></a>
+        <a class="report-shortcut" href="#stock-state-products"><span class="shortcut-number">03</span><strong>State + product</strong><small>SKU-level quantity and value</small></a>
+        <details class="more-sections"><summary>More sections <span class="muted">Distributors · analysis · tools</span></summary><div class="more-section-links"><a href="#stock-distributors">Stock by distributor</a><a href="#ai-analysis">Local analysis</a><a href="#report-guide">How to read this report</a><a href="#stock-upload">Workbook upload</a></div></details>
+      </div>
+    </section>
 
     <section class="section" id="report-guide">
       <details class="panel report-guide">

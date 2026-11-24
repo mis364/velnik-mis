@@ -104,6 +104,10 @@ function renderStockDetails() {
 }
 
 function populateReport() {
+  const reportMap = document.getElementById('report-map');
+  const reportContent = document.getElementById('stockContent');
+  const reportGuide = document.getElementById('report-guide');
+  if (reportMap && reportContent && reportGuide) reportMap.after(reportContent, reportGuide);
   document.getElementById('stockContent').hidden = false;
   document.getElementById('stockEmpty').hidden = true;
   document.getElementById('stockSource').textContent = DATA.source;
@@ -202,6 +206,7 @@ if (uploadInput) uploadInput.addEventListener('change', async event => {
 });
 
 if (DATA.available === false) {
+  document.getElementById('report-map').hidden = true;
   document.getElementById('stockEmpty').hidden = false;
   if (DATA.error) document.getElementById('stockEmptyMessage').textContent = DATA.error;
 } else {
