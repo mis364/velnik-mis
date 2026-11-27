@@ -547,10 +547,19 @@ function renderInsights() {
 function renderNepalPanel() {
   const nepal = DATA.nepalManual;
   const target = document.getElementById('nepalPanel');
+  const ownerControls = document.body.dataset.owner === 'true';
+  if (!nepal && !ownerControls) {
+    const section = target.closest('#nepal');
+    if (section) section.hidden = true;
+    document.querySelectorAll('a[href="#nepal"]').forEach(link => { link.hidden = true; });
+    const guideEntry = [...document.querySelectorAll('#report-guide .guide-grid article')]
+      .find(article => article.querySelector('h3')?.textContent.trim() === 'Nepal sales');
+    if (guideEntry) guideEntry.hidden = true;
+    return;
+  }
   if (!nepal) { target.innerHTML = '<article class="panel">No NP summary row was found in the Without GST sheet.</article>'; return; }
   const pct = Number(nepal.achievementPct) || (nepal.plan ? nepal.achievement / nepal.plan : 0);
   const productRows = (nepal.productSales || []).map((item,index) => `<label>${safe(item.product)}<input type="number" step="0.01" min="0" data-nepal-product="${index}" value="${Number(item.value||0).toFixed(2)}"></label>`).join('');
-  const ownerControls = document.body.dataset.owner === 'true';
   const editForm = ownerControls ? `<form id="nepalManualForm" class="panel nepal-form"><h3>Update Nepal figures</h3><p class="muted small">Enter amounts in lakh. Saving updates the report for this reporting month.</p><div class="nepal-input-grid"><label>Monthly plan<input name="plan" type="number" step="0.01" value="${Number(nepal.plan||0).toFixed(2)}" required></label><label>Monthly billing achievement<input name="achievement" id="nepalAchievement" type="number" step="0.01" value="${Number(nepal.achievement||0).toFixed(2)}" required></label><label>Billing on ${safe(nepal.dailyHeader || 'summary date')}<input name="dailyBilling" type="number" step="0.01" value="${Number(nepal.dailyBilling||0).toFixed(2)}" required></label><label>Today's average plan<input name="todayPlan" type="number" step="0.01" value="${Number(nepal.todayPlan||0).toFixed(2)}" required></label><label>Today's achievement<input name="todayAchievement" type="number" step="0.01" value="${Number(nepal.todayAchievement||0).toFixed(2)}" required></label></div><h4>Nepal product sales (lakh)</h4><div class="nepal-input-grid">${productRows}</div><p class="muted small">If you change only the monthly achievement, Other / Range Value adjusts to balance the Nepal product mix. You can also edit the product amounts.</p><div class="nepal-form-footer"><button class="button primary" type="submit">Save Nepal figures</button><span id="nepalSaveStatus" role="status"></span></div></form>` : '';
   target.innerHTML = `<article class="panel nepal-main"><div class="nepal-metrics"><div class="nepal-metric"><span>Monthly billing achievement</span><strong>${money(nepal.achievement)} lakh</strong><small>Plan ${money(nepal.plan)} lakh · ${(pct*100).toFixed(1)}%</small></div><div class="nepal-metric"><span>Billing on ${safe(nepal.dailyHeader || 'summary date')}</span><strong>${money(nepal.dailyBilling)} lakh</strong><small>Dated summary value</small></div><div class="nepal-metric"><span>Today's average plan</span><strong>${money(nepal.todayPlan)} lakh</strong><small>Today's achievement ${money(nepal.todayAchievement)} lakh</small></div></div><p class="nepal-note">${nepal.includedInPeriod ? `${money(nepal.achievement)} lakh is included in the period total, Nepal state chart, and product mix.` : 'Nepal transactions already appear in Raw, so the monthly amount is not added twice.'} The daily chart uses dated Raw transactions; the summary does not provide daily Nepal transaction detail.</p></article>${editForm}`;
   if (!ownerControls) return;

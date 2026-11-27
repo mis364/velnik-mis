@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from workbook_utils import clean_text, number
+from workbook_utils import clean_text, number, state_is_allowed
 
 
 REQUIRED_WEEKLY_COLUMNS = {"State", "Week Plan", "Week Ach.", "Balance"}
@@ -26,7 +26,7 @@ def weekly_label(source_name):
     return f"{int(start_day):02d}-{int(end_day):02d} {month} {year}"
 
 
-def build_weekly_performance(workbook_source, source_name="weekly_plan.xlsx", loaded_at=None):
+def build_weekly_performance(workbook_source, source_name="weekly_plan.xlsx", loaded_at=None, allowed_states=None):
     """Read state week-plan, achievement, and balance values from the weekly workbook."""
     sheet = pd.read_excel(workbook_source, sheet_name=0, header=0)
     missing = REQUIRED_WEEKLY_COLUMNS - set(sheet.columns)
@@ -41,6 +41,8 @@ def build_weekly_performance(workbook_source, source_name="weekly_plan.xlsx", lo
     for _, row in sheet.iterrows():
         state = clean_text(row["State"])
         if state.lower() in {"", "nan", "total", "grand total", "check"}:
+            continue
+        if not state_is_allowed(state, allowed_states):
             continue
         plan = number(row["Week Plan"])
         achievement = number(row["Week Ach."])

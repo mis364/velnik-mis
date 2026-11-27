@@ -67,6 +67,26 @@ $env:SALES_MIS_PASSWORD = "use-a-long-unique-password"
 
 For local development only, omit S3 variables to use the temporary local `data` directory. Production deployments must configure a private S3 bucket and task IAM role.
 
+### Manager accounts
+
+Keep the owner credentials in `SALES_MIS_USERNAME` and `SALES_MIS_PASSWORD`. For local development, manager accounts can be stored in the ignored `data/manager_accounts.json` file with PBKDF2 password hashes and assigned state labels. In production, set `SALES_MIS_MANAGERS` through AWS Secrets Manager. An account can define multiple `loginOptions`; each option has its own `loginId`, visible `groupName`, and state scope, and uses that manager's password. This supports separate state logins as well as consolidated South and MH logins. State labels are matched without regard to letter case and must match the labels used in the workbooks.
+
+The sign-in page offers Boss and Manager modes. Manager mode lists each configured state or region login and fills the username with its `loginId`; managers enter their account password to continue.
+
+```json
+[
+  {"username":"manager1","name":"Manager One","password":"use-a-strong-password","states":["DL","HR"],"loginOptions":[
+    {"loginId":"DL","groupName":"DL","states":["DL"]},
+    {"loginId":"HR","groupName":"HR","states":["HR"]}
+  ]},
+  {"username":"manager2","name":"Manager Two","password":"use-another-strong-password","states":["AP","TG"],"loginOptions":[
+    {"loginId":"south","groupName":"South","states":["AP","TG"]}
+  ]}
+]
+```
+
+Managers can view and download report data for their assigned states. Workbook uploads, Nepal figure edits, and the full backup remain owner-only. Store production manager credentials in AWS Secrets Manager and pass them to the task as `SALES_MIS_MANAGERS`.
+
 ## Tests
 
 ```powershell

@@ -5,7 +5,7 @@ from io import BytesIO
 
 import pandas as pd
 
-from workbook_utils import clean_text, number
+from workbook_utils import clean_text, number, state_is_allowed
 
 
 SHEET_NAME = "SS to DB Sale"
@@ -49,6 +49,7 @@ def build_billing_efficiency_report(
     workbook_source,
     source_name="billing_efficiency_latest.xlsm",
     loaded_at=None,
+    allowed_states=None,
 ):
     if isinstance(workbook_source, bytes):
         workbook_source = BytesIO(workbook_source)
@@ -83,6 +84,10 @@ def build_billing_efficiency_report(
         raise ValueError("No distributor codes were found in SS to DB Sale.")
 
     frame["state"] = frame["State"].map(lambda value: clean_text(value, "Unclassified"))
+    if allowed_states is not None:
+        frame = frame[frame["state"].map(lambda value: state_is_allowed(value, allowed_states))].copy()
+        if frame.empty:
+            raise ValueError("No billing rows were found for the manager's assigned states.")
     frame["zone"] = frame["Zone"].map(lambda value: clean_text(value, "Unclassified"))
     frame["representative"] = frame["Res SR/SO Name"].map(
         lambda value: clean_text(value, "Unassigned")

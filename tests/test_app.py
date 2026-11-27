@@ -149,12 +149,40 @@ class BillingEfficiencyReportTests(unittest.TestCase):
         finally:
             workbook.close()
 
+    def test_manager_scope_limits_billing_rows_and_summaries(self):
+        workbook = self.create_workbook([
+            {
+                "Month": "Apr", "DB Code": "DB-1", "DB Status": "Active",
+                "Zone": "North", "State": "State A", "SS Name": "SS A",
+                "DB Name": "Distributor 1", "Res SR/SO Name": "Rep A",
+                "Value In Lacs": 0, "Babelois Diaper": 1,
+            },
+            {
+                "Month": "Apr", "DB Code": "DB-2", "DB Status": "Active",
+                "Zone": "South", "State": "State B", "SS Name": "SS B",
+                "DB Name": "Distributor 2", "Res SR/SO Name": "Rep B",
+                "Value In Lacs": 9, "Babelois Diaper": 1,
+            },
+        ])
+        try:
+            report = build_billing_efficiency_report(workbook, allowed_states={"state a"})
+        finally:
+            workbook.close()
+
+        self.assertEqual(report["monthly"][0]["salesLakh"], 0)
+        self.assertEqual({row["state"] for row in report["states"]}, {"State A"})
+        self.assertEqual({row["dbName"] for row in report["zeroBilling"]}, {"Distributor 1"})
+
 
 class AuthenticationTests(unittest.TestCase):
     def setUp(self):
         self.environment = patch.dict(
             os.environ,
-            {"SALES_MIS_USERNAME": "owner", "SALES_MIS_PASSWORD": "test-password"},
+            {
+                "SALES_MIS_USERNAME": "owner",
+                "SALES_MIS_PASSWORD": "test-password",
+                "SALES_MIS_MANAGERS": "",
+            },
         )
         self.environment.start()
         self.server = app.ThreadingHTTPServer(("127.0.0.1", 0), app.SalesMISHandler)
@@ -179,7 +207,7 @@ class AuthenticationTests(unittest.TestCase):
     def test_reports_and_workbook_changes_require_owner_login(self):
         status, _, body = self.request("GET", "/login")
         self.assertEqual(status, 200)
-        self.assertIn(b"Sign in with the owner account to view reports", body)
+        self.assertIn(b"Choose Owner or Manager sign in", body)
 
         status, _, body = self.request("GET", "/static/styles.css")
         self.assertEqual(status, 200)
@@ -274,6 +302,39 @@ class AuthenticationTests(unittest.TestCase):
             )
         self.assertEqual(status, 200)
         self.assertIn(b'id="billing-upload"', body)
+
+    def test_manager_can_view_reports_but_cannot_change_or_download_all_data(self):
+        manager = [{"username": "mp-manager", "password": "manager-password", "states": ["MP"]}]
+        with patch.dict(os.environ, {"SALES_MIS_MANAGERS": json.dumps(manager)}):
+            status, _, login_page = self.request("GET", "/login")
+            self.assertEqual(status, 200)
+            self.assertIn(b"Owner", login_page)
+            self.assertIn(b"Manager", login_page)
+            manager_form = login_page.split(b'id="managerLoginPanel"', 1)[1].split(b"</form>", 1)[0]
+            self.assertIn(b'name="username"', manager_form)
+            self.assertIn(b'id="managerPassword"', manager_form)
+            self.assertNotIn(b'managerUsername', manager_form)
+            self.assertIn(b'value="MP"', login_page)
+            status, headers, _ = self.request(
+                "POST",
+                "/login",
+                body="accountType=manager&username=MP&password=manager-password",
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+            )
+            self.assertEqual(status, 303)
+            cookie = dict(headers)["Set-Cookie"].split(";", 1)[0]
+            manager_headers = {"Cookie": cookie}
+
+            status, _, body = self.request("GET", "/", headers=manager_headers)
+            self.assertEqual(status, 200)
+            self.assertIn(b"mp-manager", body)
+            self.assertNotIn(b"Download backup", body)
+            self.assertNotIn(b"Choose workbook", body)
+
+            status, _, _ = self.request("GET", "/backup-download", headers=manager_headers)
+            self.assertEqual(status, 403)
+            status, _, _ = self.request("POST", "/upload", headers=manager_headers)
+            self.assertEqual(status, 403)
 
     def test_home_page_allows_initial_sales_workbook_upload(self):
         _, login_headers, _ = self.request(
@@ -450,6 +511,81 @@ class AuthenticationTests(unittest.TestCase):
                 self.assertEqual(backup.read("latest.xlsx"), b"sales workbook")
 
 
+class ManagerStateScopeTests(unittest.TestCase):
+    def test_local_manager_password_hash_is_verified(self):
+        with tempfile.TemporaryDirectory() as directory:
+            config_path = Path(directory) / "manager_accounts.json"
+            salt = "00112233445566778899aabbccddeeff"
+            password = "local-manager-test"
+            password_hash = app.hashlib.pbkdf2_hmac(
+                "sha256", password.encode(), bytes.fromhex(salt), app.MANAGER_PASSWORD_HASH_ITERATIONS
+            ).hex()
+            config_path.write_text(json.dumps([{
+                "username": "state-manager",
+                "passwordHash": password_hash,
+                "salt": salt,
+                "states": ["UP"],
+            }]), encoding="utf-8")
+            with (
+                patch.object(app, "MANAGER_ACCOUNTS_PATH", config_path),
+                patch.dict(os.environ, {"SALES_MIS_USERNAME": "owner"}, clear=True),
+            ):
+                account = app.manager_accounts()[0]
+        self.assertTrue(app.manager_password_matches(account, password))
+        self.assertFalse(app.manager_password_matches(account, "wrong"))
+
+    def test_sales_payload_is_recomputed_from_only_assigned_states(self):
+        workbook = tempfile.TemporaryFile()
+        raw = pd.DataFrame([
+            {"Voucher Number": "V1", "Date": "2026-10-01", "Without GST": 10, "In Lacs": 11, "State": "UP", "Item Group2": "Product A"},
+            {"Voucher Number": "V2", "Date": "2026-10-01", "Without GST": 90, "In Lacs": 99, "State": "MP", "Item Group2": "Product B"},
+        ])
+        db = pd.DataFrame([
+            {"DB Code": "DB-UP", "DB Status": "ACTIVE", "State": "UP", "DB Name": "UP Distributor", "Zero Billing": "Zero Billing DB"},
+            {"DB Code": "DB-MP", "DB Status": "ACTIVE", "State": "MP", "DB Name": "MP Distributor", "Zero Billing": "Zero Billing DB"},
+        ])
+        with pd.ExcelWriter(workbook, engine="openpyxl") as writer:
+            raw.to_excel(writer, sheet_name="Raw", index=False, startrow=1)
+            db.to_excel(writer, sheet_name="SS to DB Sale", index=False, startrow=1)
+        workbook.seek(0)
+        try:
+            report = app.build_report(workbook, allowed_states={"up"})
+        finally:
+            workbook.close()
+
+        self.assertEqual(report["quality"]["netTotal"], 10)
+        self.assertEqual({row["label"] for row in report["stateByDay"]}, {"UP"})
+        self.assertEqual({row["product"] for row in report["productMix"]}, {"Product A"})
+        self.assertEqual({row["name"] for row in report["followups"]}, {"UP Distributor"})
+
+    def test_manager_scope_without_raw_sales_keeps_state_plan_data(self):
+        workbook = tempfile.TemporaryFile()
+        raw = pd.DataFrame([
+            {"Voucher Number": "V1", "Date": "2026-10-01", "Without GST": 10, "In Lacs": 11, "State": "UP", "Item Group2": "Product A"},
+        ])
+        db = pd.DataFrame([
+            {"DB Code": "DB-UP", "DB Status": "ACTIVE", "State": "UP", "DB Name": "UP Distributor", "Zero Billing": "Zero Billing DB"},
+        ])
+        state_summary = pd.DataFrame([
+            {"State": "NP", "Billing Plan Lacs": 100, "Ach. MTD": 40, "Achive. %": 0.4},
+            {"State": "Total", "Billing Plan Lacs": 100, "Ach. MTD": 50, "Achive. %": 0.5},
+        ])
+        with pd.ExcelWriter(workbook, engine="openpyxl") as writer:
+            raw.to_excel(writer, sheet_name="Raw", index=False, startrow=1)
+            db.to_excel(writer, sheet_name="SS to DB Sale", index=False, startrow=1)
+            state_summary.to_excel(writer, sheet_name="Without GST", index=False, startrow=1)
+        workbook.seek(0)
+        try:
+            report = app.build_report(workbook, allowed_states={"np"})
+        finally:
+            workbook.close()
+
+        self.assertEqual(report["quality"]["salesLines"], 0)
+        self.assertEqual(report["quality"]["netTotal"], 40)
+        self.assertEqual([row["state"] for row in report["statePlan"]], ["NP"])
+        self.assertEqual(report["nepalManual"]["state"], "NP")
+
+
 class ReplaceWorkbookTests(unittest.TestCase):
     def test_replaces_destination_contents(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -505,15 +641,16 @@ class ReplaceWorkbookTests(unittest.TestCase):
                     ["Product A", 5, 2, 7],
                 ]).to_excel(writer, sheet_name="Item Stock CS & SS Stock", header=False, index=False)
                 pd.DataFrame([
-                    [None, None, None],
-                    [None, None, None],
-                    ["Item", "UP", "Grand Total"],
-                    ["Product A", 7, 7],
+                    [None, None, None, None],
+                    [None, None, None, None],
+                    ["Item", "UP", "CG", "Grand Total"],
+                    ["Product A", 7, 70, 77],
                 ]).to_excel(writer, sheet_name="State wise Stock", header=False, index=False)
                 pd.DataFrame([
                     [None, None, None, None, None, None],
                     ["New State", "New Product", "New Value", "State", "Type", "SKU"],
                     ["UP", "Product A", 7, "UP", "CS", "SKU-1"],
+                    ["CG", "Product A", 70, "CG", "CS", "SKU-2"],
                 ]).to_excel(writer, sheet_name="Master Data", header=False, index=False)
 
             report = app.build_stock_report(workbook, source_name="stock.xlsx")
@@ -521,6 +658,12 @@ class ReplaceWorkbookTests(unittest.TestCase):
             detail = report["stateProductDetails"][0]
             self.assertEqual(detail["quantity"], 7)
             self.assertEqual(detail["value"], 0)
+
+            scoped = app.build_stock_report(workbook, source_name="stock.xlsx", allowed_states={"up"})
+            self.assertEqual(scoped["summary"]["totalStock"], 7)
+            self.assertEqual({row["state"] for row in scoped["states"]}, {"UP"})
+            self.assertEqual({row["state"] for row in scoped["stateProductDetails"]}, {"UP"})
+            self.assertEqual(scoped["stateProductRows"][0]["values"], {"UP": 7})
 
 
 class LastYearWorkbookTests(unittest.TestCase):
@@ -921,6 +1064,16 @@ class WeeklyRollupTests(unittest.TestCase):
         self.assertEqual(report["summary"]["plan"], 3)
         self.assertEqual(len(report["warnings"]), 1)
         self.assertIn("SO group total is not calculated", report["warnings"][0])
+
+    def test_manager_scope_limits_weekly_rows_and_totals(self):
+        rows = [
+            ["UP", 100, 60, 40],
+            ["MP", 200, 100, 100],
+        ]
+        with patch.object(app.pd, "read_excel", return_value=self.workbook(rows)):
+            report = app.build_weekly_performance("unused.xlsx", allowed_states={"up"})
+        self.assertEqual(report["summary"]["plan"], 100)
+        self.assertEqual([row["state"] for row in report["states"]], ["UP"])
 
 
 if __name__ == "__main__":

@@ -443,3 +443,110 @@ tbody tr:hover { background: #fffaf0 !important; box-shadow: inset 3px 0 var(--g
   thead { display: table-header-group; }
   tr { break-inside: avoid; page-break-inside: avoid; }
 }
+
+/* Keep signed-in identity separate from report navigation. */
+.topbar nav { min-width: 0; justify-content: center; }
+.topbar nav a { flex: 0 0 auto; white-space: nowrap; }
+.topbar-account { display: flex; align-items: center; flex: 0 0 auto; gap: 14px; margin-left: auto; }
+.manager-account { display: flex; align-items: center; gap: 10px; max-width: 390px; min-width: 0; padding: 7px 12px; border: 1px solid var(--line); border-radius: 13px; background: #fffdf8; }
+.manager-avatar { display: grid; flex: 0 0 36px; place-items: center; width: 36px; height: 36px; border-radius: 11px; background: linear-gradient(135deg,#f3d58e,#bd812a); color: #fff; font-size: 15px; font-weight: 800; }
+.manager-account-copy { display: grid; min-width: 0; line-height: 1.25; }
+.manager-account-role { color: var(--amber); font-size: 9px; font-weight: 800; letter-spacing: .11em; text-transform: uppercase; }
+.manager-account-name { overflow: hidden; color: var(--ink); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.manager-account-states { overflow: hidden; color: var(--muted); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.account-action { padding: 8px 11px; border: 1px solid var(--line); border-radius: 9px; color: var(--ink); font-size: 12px; font-weight: 650; white-space: nowrap; }
+.account-action:hover { border-color: var(--gold); background: #fffaf0; color: var(--amber); }
+@media (max-width:1050px) {
+  .topbar { height: auto; flex-wrap: wrap; gap: 10px 16px; padding: 10px 20px; }
+  .topbar nav { order: 3; flex-basis: 100%; width: 100%; justify-content: flex-start; overflow-x: auto; padding-bottom: 3px; }
+  .topbar-account { order: 2; margin-left: auto; }
+}
+@media (max-width:520px) {
+  .topbar { padding: 10px 14px; }
+  .topbar-account { max-width: calc(100% - 4px); margin-left: 0; }
+  .manager-account { max-width: calc(100vw - 130px); padding: 6px 9px; }
+  .manager-account-states { max-width: 190px; }
+}
+
+/* Minimal enterprise palette: navy, champagne gold, and white. */
+:root {
+  --ink: #172B4D;
+  --muted: rgba(23,43,77,.68);
+  --line: #E5E7EB;
+  --paper: #F7F7F5;
+  --navy: #172B4D;
+  --teal: #C99A35;
+  --amber: #C99A35;
+  --gold: #C99A35;
+  --gold-light: #F7F7F5;
+  --positive: #172B4D;
+  --negative: #172B4D;
+  --shadow: 0 6px 20px rgba(23,43,77,.055);
+  --shadow-soft: 0 10px 28px rgba(23,43,77,.055);
+  --shadow-lift: 0 12px 28px rgba(23,43,77,.09);
+}
+
+html, body { background-color: #F3F6FC !important; color: #172B4D !important; }
+body {
+  background-image: linear-gradient(180deg, #F8FAFD 0%, #F3F6FC 52%, #EAF0FA 100%) !important;
+  background-attachment: fixed;
+}
+body, h1, h2, h3, h4, p, a, label, span, strong, small, th, td, button, input, select, textarea { text-shadow: none; }
+h1, h2, h3, h4, .brand, .topbar nav, .topbar nav a, .section-heading h2, .panel-heading h3 { color: #172B4D; }
+.muted, .small, .source-chip, .hero-copy, .stat-label, .stat-note, .footnote, footer,
+.axis-label, .mix-value small, .insight-label, .insight p, .table-footer { color: rgba(23,43,77,.68) !important; }
+
+.topbar { border-color: #E5E7EB !important; background: #FFFFFF !important; background-image: none !important; box-shadow: 0 2px 12px rgba(23,43,77,.045) !important; backdrop-filter: none !important; }
+.brand-mark { border: 0 !important; background: #C99A35 !important; color: #FFFFFF !important; box-shadow: none !important; }
+.brand:hover .brand-mark { transform: none; box-shadow: none !important; }
+.topbar nav a:hover, .topbar nav a.active { color: #C99A35 !important; }
+.topbar nav a::after { background: #C99A35 !important; }
+.account-action { border-color: #E5E7EB !important; background: #FFFFFF !important; color: #172B4D !important; }
+.account-action:hover { border-color: #C99A35 !important; background: #F7F7F5 !important; color: #172B4D !important; }
+.manager-account { border-color: #E5E7EB !important; background: #FFFFFF !important; box-shadow: none !important; }
+.manager-avatar { background: #C99A35 !important; color: #FFFFFF !important; box-shadow: none !important; }
+.manager-account-role { color: #C99A35 !important; }
+.manager-account-name, .manager-account-states { color: #172B4D !important; }
+
+.hero { border-color: #E5E7EB !important; background: linear-gradient(135deg,#FFFFFF 0%,#F7F7F5 100%) !important; box-shadow: var(--shadow-soft) !important; }
+.hero::before, .hero::after { display: none !important; content: none !important; }
+.hero h1, .hero .hero-copy, .hero .as-of strong, .hero .as-of small, .hero .as-of span { color: #172B4D !important; }
+.hero .kicker, .kicker, .next-step b { color: #C99A35 !important; }
+.hero .as-of { border-color: #E5E7EB !important; }
+
+.stat, .panel, .refresh-panel, .insight, .nepal-metric, .table-panel,
+.report-shortcut, .more-sections, .guide-grid article { border-color: #E5E7EB !important; background: #FFFFFF !important; box-shadow: var(--shadow) !important; }
+.stat { border-top-color: #C99A35 !important; }
+.stat::after { display: none !important; content: none !important; }
+.stat-value { background: none !important; color: #172B4D !important; }
+.stat:hover, .panel:hover, .refresh-panel:hover, .insight:hover, .report-shortcut:hover { border-color: #C99A35 !important; box-shadow: var(--shadow-lift) !important; transform: translateY(-2px); }
+.shortcut-number, .manual-tag, .status-pill, .achievement, .unit, .language-button, .quality-notes { border-color: #E5E7EB !important; background: #F7F7F5 !important; color: #172B4D !important; }
+.shortcut-number, .report-guide summary::after, .more-sections summary::after { color: #C99A35 !important; }
+.insight { border-left-color: #C99A35 !important; }
+.insight-index { color: rgba(23,43,77,.55) !important; }
+.quality-notes { border-left: 3px solid #C99A35 !important; }
+
+.sales-bar { fill: #172B4D !important; }
+.sales-bar.latest { fill: #C99A35 !important; }
+.bar-value, svg text { fill: #172B4D !important; }
+.chart-grid { stroke: #E5E7EB !important; }
+.mix-track { background: #F7F7F5 !important; }
+.mix-track span { background: #C99A35 !important; }
+.table-panel, table, th, td { border-color: #E5E7EB !important; }
+th { background: #F7F7F5 !important; color: #172B4D !important; }
+td { color: #172B4D !important; }
+tbody tr:hover { background: #F7F7F5 !important; box-shadow: inset 3px 0 #C99A35 !important; }
+.gap, .negative-stock, .upload-status.error, #nepalSaveStatus, .ai-message.error { color: #172B4D !important; }
+.date-filters input, .table-tools input, .table-tools select, input, select, textarea { border-color: #E5E7EB !important; background: #FFFFFF !important; color: #172B4D !important; }
+input:focus, select:focus, textarea:focus { border-color: #C99A35 !important; box-shadow: 0 0 0 3px rgba(201,154,53,.15) !important; }
+.button, .upload-button { border-color: #C99A35 !important; background: #FFFFFF !important; color: #172B4D !important; }
+.button.primary { border-color: #C99A35 !important; background: #C99A35 !important; color: #FFFFFF !important; box-shadow: 0 5px 14px rgba(23,43,77,.1) !important; }
+.button:not(:disabled):hover, .upload-button:hover { border-color: #C99A35 !important; background: #F7F7F5 !important; color: #172B4D !important; box-shadow: var(--shadow) !important; }
+.button.primary:hover { background: #C99A35 !important; color: #FFFFFF !important; }
+.language-toggle, .language-button.selected { border-color: #C99A35 !important; background: #FFFFFF !important; color: #172B4D !important; }
+.live-dot { background: #C99A35 !important; box-shadow: none !important; animation: none !important; }
+.ai-message, .ai-message.assistant, .ai-message.user, .ai-message.error { border: 1px solid #E5E7EB !important; background: #FFFFFF !important; color: #172B4D !important; }
+.ai-message.user { border-color: #C99A35 !important; background: #F7F7F5 !important; }
+.nepal-metric { background: #F7F7F5 !important; }
+.status-pill, .achievement, .unit, .manual-tag { background: #F7F7F5 !important; color: #172B4D !important; }
+.upload-status { color: #172B4D !important; }

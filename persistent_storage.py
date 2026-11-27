@@ -31,7 +31,12 @@ class PersistentObjectStorage:
         )
 
     def _key(self, filename):
-        if not filename or Path(filename).name != filename:
+        if (
+            not filename
+            or Path(filename).name != filename
+            or "/" in filename
+            or "\\" in filename
+        ):
             raise ValueError("Persistent storage only accepts data filenames.")
         return f"{self.prefix}{filename}"
 

@@ -4,6 +4,7 @@ import argparse
 import calendar
 import hashlib
 import hmac
+import html
 import json
 import mimetypes
 import os
@@ -28,13 +29,14 @@ except ModuleNotFoundError as exc:
     ) from exc
 
 from weekly import build_weekly_performance
-from workbook_utils import clean_text, number
+from workbook_utils import clean_text, expand_state_scope, number, normalize_state, state_is_allowed
 from billing_efficiency import build_billing_efficiency_report
 from persistent_storage import from_environment
 
 
 BASE_DIR = Path(__file__).resolve().parent
 DATA_DIR = BASE_DIR / "data"
+MANAGER_ACCOUNTS_PATH = DATA_DIR / "manager_accounts.json"
 STATIC_DIR = BASE_DIR / "static"
 TEMPLATE_DIR = BASE_DIR / "templates"
 WORKBOOK_PATH = DATA_DIR / "latest.xlsx"
@@ -65,6 +67,7 @@ BACKUP_FILE_NAMES = (
 )
 SESSION_COOKIE_NAME = "sales_mis_session"
 SESSION_TTL_SECONDS = 12 * 60 * 60
+MANAGER_PASSWORD_HASH_ITERATIONS = 310_000
 SESSION_SIGNING_KEY = (
     os.environ.get("SALES_MIS_SESSION_SIGNING_KEY", "").encode("utf-8") or os.urandom(32)
 )
@@ -151,10 +154,10 @@ def persistent_storage_status():
     )
 
 
-def build_analysis_context(scope, start_date=None, end_date=None):
+def build_analysis_context(scope, start_date=None, end_date=None, allowed_states=None):
     context = {}
     if scope in {"both", "sales"}:
-        report = get_report()
+        report = get_report(allowed_states)
         period = report["period"]
         start = max(start_date or period["start"], period["start"])
         end = min(end_date or period["end"], period["end"])
@@ -173,7 +176,7 @@ def build_analysis_context(scope, start_date=None, end_date=None):
 
         daily = [row for row in report["daily"] if start <= row["date"] <= end]
         comparison = build_period_comparison(report["history"], start, end)
-        weekly = get_weekly_performance()
+        weekly = get_weekly_performance(allowed_states)
         context["sales"] = {
             "period": {"start": start, "end": end},
             "comparison": comparison,
@@ -205,7 +208,7 @@ def build_analysis_context(scope, start_date=None, end_date=None):
             ),
         }
     if scope in {"both", "stock"}:
-        stock = get_stock_report()
+        stock = get_stock_report(allowed_states)
         context["stock"] = None if stock is None else {
             "reportDate": stock["reportDate"],
             "summary": stock["summary"],
@@ -765,7 +768,7 @@ def find_plan_columns(frame):
     return state_col, plan_col, ach_col
 
 
-def build_report(workbook_source, source_name="latest.xlsx", loaded_at=None, manual_nepal_override=None):
+def build_report(workbook_source, source_name="latest.xlsx", loaded_at=None, manual_nepal_override=None, allowed_states=None):
     """Read source sheets and return a JSON-safe, month-to-date report."""
     book = pd.ExcelFile(workbook_source)
     missing = REQUIRED_SHEETS - set(book.sheet_names)
@@ -783,6 +786,13 @@ def build_report(workbook_source, source_name="latest.xlsx", loaded_at=None, man
     raw = raw[raw["Date"].notna()].copy()
     if raw.empty:
         raise ValueError("No dated sales lines were found in the Raw sheet.")
+    # Use the source workbook's reporting period for every manager scope. A
+    # state may have plan or distributor data even when it has no Raw sales
+    # rows (for example, Nepal is reported in the summary sheet).
+    report_first_date = raw["Date"].min().normalize()
+    report_last_date = raw["Date"].max().normalize()
+    if allowed_states is not None:
+        raw = raw[raw["State"].map(lambda value: state_is_allowed(value, allowed_states))].copy()
 
     raw["Without GST"] = pd.to_numeric(raw["Without GST"], errors="coerce")
     raw["In Lacs"] = pd.to_numeric(raw["In Lacs"], errors="coerce")
@@ -794,12 +804,12 @@ def build_report(workbook_source, source_name="latest.xlsx", loaded_at=None, man
     raw["State"] = raw["State"].map(lambda x: clean_text(x, "Unclassified"))
     raw["Item Group2"] = raw["Item Group2"].map(lambda x: clean_text(x, "Unclassified"))
 
-    last_date = raw["Date"].max().normalize()
-    first_date = last_date.replace(day=1)
+    last_date = report_last_date
+    first_date = report_first_date.replace(day=1)
     period_key = first_date.strftime("%Y-%m")
     raw["DateKey"] = raw["Date"].dt.strftime("%Y-%m-%d")
-    history_start = raw["Date"].min().strftime("%Y-%m-%d")
-    history_end = raw["Date"].max().strftime("%Y-%m-%d")
+    history_start = (raw["Date"].min() if not raw.empty else report_first_date).strftime("%Y-%m-%d")
+    history_end = (raw["Date"].max() if not raw.empty else report_last_date).strftime("%Y-%m-%d")
     history_daily = []
     for date_key, group in raw.groupby("DateKey", sort=True):
         history_daily.append({
@@ -844,6 +854,14 @@ def build_report(workbook_source, source_name="latest.xlsx", loaded_at=None, man
         if state_col and plan_col and ach_col:
             plan_sheet[plan_col] = pd.to_numeric(plan_sheet[plan_col], errors="coerce")
             plan_sheet[ach_col] = pd.to_numeric(plan_sheet[ach_col], errors="coerce")
+            if allowed_states is not None:
+                includes_mh_parts = {"mh a", "mh av", "mh bh", "mh t", "mh b"}.issubset(allowed_states)
+                plan_sheet = plan_sheet[
+                    plan_sheet[state_col].map(
+                        lambda value: state_is_allowed(value, allowed_states)
+                        and not (includes_mh_parts and normalize_state(value) == "mh")
+                    )
+                ].copy()
             np_rows = plan_sheet[plan_sheet[state_col].astype(str).str.strip().str.upper().eq("NP")]
             if not np_rows.empty:
                 np_row = np_rows.iloc[0]
@@ -877,7 +895,8 @@ def build_report(workbook_source, source_name="latest.xlsx", loaded_at=None, man
                 plan = number(row[plan_col])
                 achievement = number(row[ach_col])
                 if state.strip().lower() == "total":
-                    plan_total_override = plan
+                    if allowed_states is None:
+                        plan_total_override = plan
                     continue
                 if state.lower() in {"", "nan", "check"} or not plan or plan <= 0 or achievement is None:
                     continue
@@ -904,6 +923,8 @@ def build_report(workbook_source, source_name="latest.xlsx", loaded_at=None, man
     missing_db = db_required - set(db.columns)
     if missing_db:
         raise ValueError("SS to DB Sale sheet is missing required column(s): " + ", ".join(sorted(missing_db)))
+    if allowed_states is not None:
+        db = db[db["State"].map(lambda value: state_is_allowed(value, allowed_states))].copy()
     status = db["DB Status"].fillna("").astype(str).str.strip().str.upper()
     zero_flag = db["Zero Billing"].fillna("").astype(str).str.strip().str.lower().eq("zero billing db")
     active_zero = db[(status == "ACTIVE") & zero_flag]
@@ -1010,7 +1031,7 @@ def build_report(workbook_source, source_name="latest.xlsx", loaded_at=None, man
     }
 
 
-def build_stock_report(workbook_source, source_name="stock_latest.xlsx", loaded_at=None):
+def build_stock_report(workbook_source, source_name="stock_latest.xlsx", loaded_at=None, allowed_states=None):
     """Read the stock workbook's product, state, distributor, and NPD summaries."""
     book = pd.ExcelFile(workbook_source)
     missing = REQUIRED_STOCK_SHEETS - set(book.sheet_names)
@@ -1174,6 +1195,64 @@ def build_stock_report(workbook_source, source_name="stock_latest.xlsx", loaded_
         "stateProductDetails": state_product_details,
         "distributors": distributors,
     }
+    if allowed_states is not None:
+        state_columns = [
+            column for column in state_columns
+            if state_is_allowed(column, allowed_states)
+        ]
+        states = [row for row in states if state_is_allowed(row["state"], allowed_states)]
+        state_product_rows = [
+            {
+                **row,
+                "values": {
+                    state: value for state, value in row["values"].items()
+                    if state_is_allowed(state, allowed_states)
+                },
+                "grandTotal": sum(
+                    number(value) or 0.0 for state, value in row["values"].items()
+                    if state_is_allowed(state, allowed_states)
+                ),
+            }
+            for row in state_product_rows
+            if row["item"].strip().casefold() not in {"grand total", "total"}
+        ]
+        products = []
+        for row in state_product_rows:
+            values = [number(value) or 0.0 for value in row["values"].values()]
+            products.append({
+                "item": row["item"],
+                "cs": None,
+                "ss": None,
+                "total": sum(values),
+                "negative": sum(value for value in values if value < -0.01),
+            })
+        products.sort(key=lambda item: (-item["total"], item["item"]))
+        state_product_details = [
+            row for row in state_product_details
+            if state_is_allowed(row["state"], allowed_states)
+        ]
+        distributors = [
+            row for row in distributors
+            if state_is_allowed(row["state"], allowed_states)
+        ]
+        negative_values = [item["negative"] for item in products if item["negative"] < 0]
+        report.update({
+            "summary": {
+                "totalStock": sum(item["total"] for item in products),
+                "csStock": None,
+                "ssStock": None,
+                "negativeStock": sum(abs(value) for value in negative_values),
+                "negativeProductCount": len(negative_values),
+                "npdStock": None,
+                "distributorCount": len(distributors),
+            },
+            "products": products,
+            "states": states,
+            "stateColumns": [str(column) for column in state_columns],
+            "stateProductRows": state_product_rows,
+            "stateProductDetails": state_product_details,
+            "distributors": distributors,
+        })
     book.close()
     return report
 
@@ -1196,7 +1275,16 @@ def read_nepal_manual():
         return None
 
 
-def get_report():
+def get_report(allowed_states=None):
+    if allowed_states is not None:
+        meta = read_metadata()
+        return build_report(
+            WORKBOOK_PATH,
+            meta.get("source_name", WORKBOOK_PATH.name),
+            meta.get("loaded_at"),
+            read_nepal_manual(),
+            allowed_states=allowed_states,
+        )
     mtime = WORKBOOK_PATH.stat().st_mtime
     manual_mtime = NEPAL_MANUAL_PATH.stat().st_mtime if NEPAL_MANUAL_PATH.exists() else None
     cache_key = (mtime, manual_mtime)
@@ -1209,9 +1297,20 @@ def get_report():
         return payload
 
 
-def get_stock_report():
+def get_stock_report(allowed_states=None):
     if not STOCK_WORKBOOK_PATH.exists():
         return None
+    if allowed_states is not None:
+        try:
+            meta = json.loads(STOCK_META_PATH.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            meta = {"source_name": STOCK_WORKBOOK_PATH.name, "loaded_at": "Unknown"}
+        return build_stock_report(
+            STOCK_WORKBOOK_PATH,
+            meta.get("source_name", STOCK_WORKBOOK_PATH.name),
+            meta.get("loaded_at"),
+            allowed_states=allowed_states,
+        )
     mtime = STOCK_WORKBOOK_PATH.stat().st_mtime
     with _CACHE_LOCK:
         if _STOCK_CACHE["payload"] is not None and _STOCK_CACHE["mtime"] == mtime:
@@ -1229,9 +1328,23 @@ def get_stock_report():
         return payload
 
 
-def get_weekly_performance():
+def get_weekly_performance(allowed_states=None):
     if not WEEKLY_WORKBOOK_PATH.exists():
         return {"available": False}
+    if allowed_states is not None:
+        try:
+            meta = json.loads(WEEKLY_META_PATH.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            meta = {"source_name": WEEKLY_WORKBOOK_PATH.name, "loaded_at": "Unknown"}
+        try:
+            return build_weekly_performance(
+                WEEKLY_WORKBOOK_PATH,
+                meta.get("source_name", WEEKLY_WORKBOOK_PATH.name),
+                meta.get("loaded_at"),
+                allowed_states=allowed_states,
+            )
+        except ValueError:
+            return {"available": False}
     mtime = WEEKLY_WORKBOOK_PATH.stat().st_mtime
     with _CACHE_LOCK:
         if _WEEKLY_CACHE["payload"] is not None and _WEEKLY_CACHE["mtime"] == mtime:
@@ -1249,9 +1362,20 @@ def get_weekly_performance():
         return payload
 
 
-def get_last_year_report():
+def get_last_year_report(allowed_states=None):
     if not LAST_YEAR_WORKBOOK_PATH.exists():
         return None
+    if allowed_states is not None:
+        try:
+            meta = json.loads(LAST_YEAR_META_PATH.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            meta = {"source_name": LAST_YEAR_WORKBOOK_PATH.name, "loaded_at": "Unknown"}
+        return build_report(
+            LAST_YEAR_WORKBOOK_PATH,
+            meta.get("source_name", LAST_YEAR_WORKBOOK_PATH.name),
+            meta.get("loaded_at"),
+            allowed_states=allowed_states,
+        )
     mtime = LAST_YEAR_WORKBOOK_PATH.stat().st_mtime
     with _CACHE_LOCK:
         if _LAST_YEAR_CACHE["payload"] is not None and _LAST_YEAR_CACHE["mtime"] == mtime:
@@ -1269,9 +1393,23 @@ def get_last_year_report():
         return payload
 
 
-def get_billing_efficiency_report():
+def get_billing_efficiency_report(allowed_states=None):
     if not BILLING_EFFICIENCY_WORKBOOK_PATH.exists():
         return None
+    if allowed_states is not None:
+        try:
+            meta = json.loads(BILLING_EFFICIENCY_META_PATH.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            meta = {
+                "source_name": BILLING_EFFICIENCY_WORKBOOK_PATH.name,
+                "loaded_at": "Unknown",
+            }
+        return build_billing_efficiency_report(
+            BILLING_EFFICIENCY_WORKBOOK_PATH,
+            meta.get("source_name", BILLING_EFFICIENCY_WORKBOOK_PATH.name),
+            meta.get("loaded_at"),
+            allowed_states=allowed_states,
+        )
     mtime = BILLING_EFFICIENCY_WORKBOOK_PATH.stat().st_mtime
     with _CACHE_LOCK:
         if (
@@ -1293,6 +1431,131 @@ def get_billing_efficiency_report():
         )
         _BILLING_EFFICIENCY_CACHE.update({"mtime": mtime, "payload": payload})
         return payload
+
+
+def manager_accounts():
+    """Read manager accounts from secrets configuration or a local ignored file."""
+    if "SALES_MIS_MANAGERS" in os.environ:
+        raw = os.environ.get("SALES_MIS_MANAGERS", "").strip()
+        if not raw:
+            return []
+        try:
+            configured = json.loads(raw)
+        except json.JSONDecodeError as exc:
+            raise RuntimeError("SALES_MIS_MANAGERS must contain a JSON array of manager accounts.") from exc
+    elif MANAGER_ACCOUNTS_PATH.is_file():
+        try:
+            configured = json.loads(MANAGER_ACCOUNTS_PATH.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise RuntimeError("data/manager_accounts.json could not be read.") from exc
+    else:
+        return []
+    if not isinstance(configured, list) or len(configured) > 50:
+        raise RuntimeError("SALES_MIS_MANAGERS must contain a JSON array with at most 50 accounts.")
+    accounts = []
+    seen_usernames = set()
+    seen_login_ids = set()
+    owner_username = os.environ.get("SALES_MIS_USERNAME", "").strip().casefold()
+    for entry in configured:
+        if not isinstance(entry, dict):
+            raise RuntimeError("Each manager account must include username, password, and states.")
+        username = entry.get("username")
+        password = entry.get("password")
+        password_hash = entry.get("passwordHash")
+        salt = entry.get("salt")
+        states = entry.get("states")
+        display_states = entry.get("displayStates", states)
+        has_plain_password = isinstance(password, str) and bool(password)
+        has_password_hash = (
+            isinstance(password_hash, str)
+            and isinstance(salt, str)
+            and re.fullmatch(r"[0-9a-fA-F]{64}", password_hash) is not None
+            and re.fullmatch(r"[0-9a-fA-F]{32}", salt) is not None
+        )
+        if (
+            not isinstance(username, str)
+            or not username.strip()
+            or not (has_plain_password or has_password_hash)
+            or not isinstance(states, list)
+            or not states
+            or any(not isinstance(state, str) or not state.strip() for state in states)
+            or not isinstance(display_states, list)
+            or any(not isinstance(state, str) or not state.strip() for state in display_states)
+        ):
+            raise RuntimeError("Each manager needs a username, password, and at least one state.")
+        normalized_username = username.strip().casefold()
+        if normalized_username in seen_usernames or normalized_username == owner_username:
+            raise RuntimeError("Manager account names must be unique and different from the owner username.")
+        seen_usernames.add(normalized_username)
+
+        login_options = entry.get("loginOptions")
+        if login_options is None:
+            login_options = [{
+                "loginId": entry.get("loginId") or states[0],
+                "groupName": entry.get("groupName") or " + ".join(display_states),
+                "states": states,
+                "displayStates": display_states,
+            }]
+        if not isinstance(login_options, list) or not login_options:
+            raise RuntimeError("Each manager needs at least one state login option.")
+
+        for option in login_options:
+            if not isinstance(option, dict):
+                raise RuntimeError("Each state login option must include loginId and states.")
+            login_id = option.get("loginId")
+            option_states = option.get("states")
+            option_display_states = option.get("displayStates", option_states)
+            group_name = option.get("groupName")
+            if (
+                not isinstance(login_id, str)
+                or not login_id.strip()
+                or not isinstance(option_states, list)
+                or not option_states
+                or any(not isinstance(state, str) or not state.strip() for state in option_states)
+                or not isinstance(option_display_states, list)
+                or any(not isinstance(state, str) or not state.strip() for state in option_display_states)
+                or (group_name is not None and (not isinstance(group_name, str) or not group_name.strip()))
+            ):
+                raise RuntimeError("Each state login option needs a username and at least one assigned state.")
+            login_id = login_id.strip()
+            normalized_login_id = login_id.casefold()
+            if (
+                normalized_login_id in seen_login_ids
+                or normalized_login_id in seen_usernames
+                or normalized_login_id == owner_username
+            ):
+                raise RuntimeError("Manager state login names must be unique and different from the owner username.")
+            seen_login_ids.add(normalized_login_id)
+            accounts.append({
+                "username": login_id,
+                "loginId": login_id,
+                "groupName": (group_name or " + ".join(option_display_states)).strip(),
+                "name": clean_text(entry.get("name"), username.strip()),
+                "password": password if has_plain_password else None,
+                "passwordHash": password_hash if has_password_hash else None,
+                "salt": salt if has_password_hash else None,
+                "states": expand_state_scope(option_states),
+                "displayStates": [state.strip() for state in option_display_states],
+            })
+    return accounts
+
+
+def manager_account_secret(account):
+    return account["passwordHash"] or account["password"]
+
+
+def manager_password_matches(account, submitted_password):
+    if account["password"] is not None:
+        return hmac.compare_digest(
+            submitted_password.encode("utf-8"), account["password"].encode("utf-8")
+        )
+    derived = hashlib.pbkdf2_hmac(
+        "sha256",
+        submitted_password.encode("utf-8"),
+        bytes.fromhex(account["salt"]),
+        MANAGER_PASSWORD_HASH_ITERATIONS,
+    ).hex()
+    return hmac.compare_digest(derived, account["passwordHash"])
 
 
 def validate_workbook_bytes(contents):
@@ -1357,13 +1620,14 @@ class SalesMISHandler(BaseHTTPRequestHandler):
         return username, password
 
     @classmethod
-    def _session_signature(cls, expires):
-        username, password = cls._credentials()
+    def _session_signature(cls, expires, username=None, password=None):
+        if username is None or password is None:
+            username, password = cls._credentials()
         credentials = f"{username}\0{password}".encode("utf-8")
         key = hmac.new(SESSION_SIGNING_KEY, credentials, hashlib.sha256).digest()
         return hmac.new(key, expires.encode("ascii"), hashlib.sha256).hexdigest()
 
-    def _has_valid_session(self):
+    def _current_principal(self):
         cookie_header = self.headers.get("Cookie", "")
         cookie = next(
             (
@@ -1381,10 +1645,38 @@ class SalesMISHandler(BaseHTTPRequestHandler):
             or len(expires) > 12
             or not signature
         ):
-            return False
+            return None
         if int(expires) < int(time.time()):
-            return False
-        return hmac.compare_digest(signature, self._session_signature(expires))
+            return None
+        username, password = self._credentials()
+        if username and password and hmac.compare_digest(
+            signature, self._session_signature(expires, username, password)
+        ):
+            return {"role": "owner", "username": username}
+        try:
+            accounts = manager_accounts()
+        except RuntimeError as exc:
+            print(str(exc), flush=True)
+            return None
+        for account in accounts:
+            if hmac.compare_digest(
+                signature,
+                self._session_signature(
+                    expires, account["username"], manager_account_secret(account)
+                ),
+            ):
+                return {
+                    "role": "manager",
+                    "username": account["username"],
+                    "name": account["name"],
+                    "groupName": account["groupName"],
+                    "states": account["states"],
+                    "displayStates": account["displayStates"],
+                }
+        return None
+
+    def _has_valid_session(self):
+        return self._current_principal() is not None
 
     def _cookie_attributes(self, max_age):
         attributes = [
@@ -1397,41 +1689,91 @@ class SalesMISHandler(BaseHTTPRequestHandler):
             attributes.append("Secure")
         return "; ".join(attributes)
 
-    def _send_login_page(self, status=200, error=""):
+    def _send_login_page(
+        self,
+        status=200,
+        error="",
+        selected_role="owner",
+        selected_login_id="",
+        submitted_username="",
+    ):
         message = (
             f'<p role="alert" style="color:#b42318">{error}</p>'
             if error
             else ""
         )
+        try:
+            accounts = manager_accounts()
+        except RuntimeError:
+            accounts = []
+        manager_options = "".join(
+            '<option value="{}"{}>{}</option>'.format(
+                html.escape(account["loginId"], quote=True),
+                " selected" if account["loginId"].casefold() == selected_login_id.casefold() else "",
+                html.escape(
+                    account["groupName"]
+                ),
+            )
+            for account in accounts
+        )
+        initial_account = next(
+            (account for account in accounts if account["loginId"] == selected_login_id),
+            accounts[0] if accounts else None,
+        )
+        manager_username = html.escape(
+            submitted_username or (initial_account["loginId"] if initial_account else ""),
+            quote=True,
+        )
+        owner_selected = selected_role != "manager"
+        manager_selected = selected_role == "manager"
+        manager_tab_disabled = "" if accounts else " disabled"
         page = f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
 <title>Sign in | Velnik MIS</title>
 <script src="/static/language.js" defer></script>
+<script src="/static/login.js" defer></script>
 <style>
 *{{box-sizing:border-box}}body{{margin:0;min-height:100vh;display:grid;place-items:center;
 background:#fff;color:#26344a;font:16px "Segoe UI",Arial,sans-serif}}
-main{{position:relative;width:min(100% - 32px,420px);padding:38px;background:#fff;border:1px solid #eadfbd;
+main{{position:relative;width:min(100% - 32px,440px);padding:38px;background:#fff;border:1px solid #eadfbd;
 border-radius:18px;box-shadow:0 18px 48px rgba(196,154,69,.16);overflow:hidden}}
 main::before{{content:"";position:absolute;top:0;left:0;width:100%;height:5px;background:linear-gradient(90deg,#c49a45,#f0d78f,#c49a45)}}
 h1{{margin:0 0 8px;color:#26344a;font-size:28px;letter-spacing:-.03em}}p{{color:#718096}}
 label{{display:block;margin:18px 0 6px;color:#26344a;font-weight:700;font-size:13px}}
-input{{width:100%;padding:12px 14px;border:1px solid #d9dfe6;border-radius:8px;color:#26344a;font:inherit}}
+input,select{{width:100%;padding:12px 14px;border:1px solid #d9dfe6;border-radius:8px;color:#26344a;font:inherit;background:#fff}}
 input:focus{{outline:none;border-color:#c49a45;box-shadow:0 0 0 3px rgba(196,154,69,.14)}}
-button{{width:100%;margin-top:22px;padding:12px;border:0;border-radius:8px;
+button{{margin-top:22px;padding:12px;border:0;border-radius:8px;
 background:linear-gradient(135deg,#c49a45,#e4c26f);color:white;font:inherit;font-weight:700;cursor:pointer;box-shadow:0 8px 18px rgba(196,154,69,.16)}}
 button:hover{{filter:brightness(1.04)}}
+.role-tabs{{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:22px 0 16px}}
+.role-tabs button{{margin:0;border:1px solid #eadfbd;background:#fff;color:#26344a;box-shadow:none}}
+.role-tabs button[aria-pressed="true"]{{background:#26344a;border-color:#26344a;color:#fff}}
+.role-tabs button:disabled{{opacity:.45;cursor:not-allowed}}
+.login-panel[hidden]{{display:none}}
+.state-help{{margin:0 0 14px;font-size:13px}}
+.login-submit{{width:100%}}
 .login-brand{{display:flex;align-items:center;gap:10px;margin-bottom:18px}}
 .login-logo{{display:grid;place-items:center;width:44px;height:44px;border-radius:14px 14px 14px 4px;background:linear-gradient(135deg,#f4d887,#c39232);color:#fff;font:800 24px Georgia,serif;box-shadow:0 9px 22px rgba(195,146,50,.22)}}
 .login-brand span:last-child{{color:#26344a;font-weight:800;font-size:13px;letter-spacing:.08em}}
 #pageLanguageToggle{{float:right;width:auto!important;margin:0 0 18px!important;padding:7px 10px!important;border:1px solid #eadfbd!important;background:#fff!important;color:#26344a!important;font-size:12px!important}}
 </style></head><body><main><div class="login-brand"><span class="login-logo">V</span><span>VELNIK MIS</span></div><button id="pageLanguageToggle" type="button" aria-label="पेज की भाषा हिंदी में बदलें">हिन्दी</button><h1>Velnik MIS</h1>
-<p>Sign in with the owner account to view reports, upload workbooks, and update figures.</p>{message}
-<form method="post" action="/login" autocomplete="on">
-<label for="username">Username</label><input id="username" name="username" autocomplete="username" required>
-<label for="password">Password</label><input id="password" name="password" type="password" autocomplete="current-password" required>
-<button type="submit">Sign in</button></form></main></body></html>"""
+<p>Choose Owner or Manager sign in.</p>{message}
+<div class="role-tabs" role="group" aria-label="Choose account type">
+<button type="button" id="bossLoginTab" aria-pressed="{str(owner_selected).lower()}" data-login-role="owner">Owner</button>
+<button type="button" id="managerLoginTab" aria-pressed="{str(manager_selected).lower()}" data-login-role="manager"{manager_tab_disabled}>Manager</button>
+</div>
+<form class="login-panel" id="bossLoginPanel" method="post" action="/login" autocomplete="on"{'' if owner_selected else ' hidden'}>
+<input type="hidden" name="accountType" value="owner">
+<label for="bossUsername">Username</label><input id="bossUsername" name="username" autocomplete="username" required>
+<label for="bossPassword">Password</label><input id="bossPassword" name="password" type="password" autocomplete="current-password" required>
+<button class="login-submit" type="submit">Sign in as Owner</button></form>
+<form class="login-panel" id="managerLoginPanel" method="post" action="/login" autocomplete="on"{'' if manager_selected else ' hidden'}>
+<input type="hidden" name="accountType" value="manager">
+<label for="managerStateGroup">Choose state or region</label><select id="managerStateGroup" name="username" aria-label="Assigned state or region" required>{manager_options}</select>
+<label for="managerPassword">Password</label><input id="managerPassword" name="password" type="password" autocomplete="current-password" required>
+<button class="login-submit" type="submit">Sign in as Manager</button></form></main></body></html>"""
         return self.send_bytes(status, page.encode("utf-8"), "text/html; charset=utf-8")
 
     def _redirect(self, location):
@@ -1464,14 +1806,35 @@ button:hover{{filter:brightness(1.04)}}
         self.wfile.write(body)
 
     def _render_owner_controls(self, template):
-        is_owner = self._has_valid_session()
+        principal = self._current_principal()
+        is_owner = bool(principal and principal["role"] == "owner")
         template = template.replace("__OWNER_SESSION__", str(is_owner).lower())
+        if is_owner:
+            nav = '<a class="account-action" href="/backup-download">Download backup</a><a class="account-action" href="/logout">Sign out</a>'
+        elif principal and principal["role"] == "manager":
+            states = " · ".join(html.escape(state) for state in principal["displayStates"])
+            group_name = principal.get("groupName", "")
+            if group_name and not (
+                len(principal["displayStates"]) == 1
+                and group_name.casefold() == principal["displayStates"][0].casefold()
+            ):
+                states = f'{html.escape(group_name)}: {states}'
+            manager_name = html.escape(principal["name"])
+            initials = html.escape((principal["name"].strip() or "M")[:1].upper())
+            nav = (
+                '<div class="manager-account" aria-label="Signed-in manager">'
+                f'<span class="manager-avatar" aria-hidden="true">{initials}</span>'
+                '<span class="manager-account-copy">'
+                '<span class="manager-account-role">Manager</span>'
+                f'<strong class="manager-account-name">{manager_name}</strong>'
+                f'<span class="manager-account-states">States: {states}</span>'
+                '</span></div><a class="account-action" href="/logout">Sign out</a>'
+            )
+        else:
+            nav = '<a class="account-action" href="/login">Sign in</a>'
         template = template.replace(
             "__OWNER_NAV__",
-            (
-                '<a href="/backup-download">Download backup</a><a href="/logout">Sign out</a>'
-                if is_owner else '<a href="/login">Owner sign in</a>'
-            ),
+            nav,
         )
         if is_owner:
             return re.sub(r"<!--GUEST-ONLY-->.*?<!--/GUEST-ONLY-->", "", template, flags=re.DOTALL)
@@ -1483,10 +1846,14 @@ button:hover{{filter:brightness(1.04)}}
             return self.send_bytes(200, b"ok", "text/plain; charset=utf-8")
         username, password = self._credentials()
         if path == "/login":
-            if not username or not password:
+            try:
+                has_accounts = bool((username and password) or manager_accounts())
+            except RuntimeError as exc:
+                return self.send_bytes(503, str(exc).encode("utf-8"), "text/plain; charset=utf-8")
+            if not has_accounts:
                 return self.send_bytes(
                     503,
-                    b"Owner sign-in is not configured. Set SALES_MIS_USERNAME and SALES_MIS_PASSWORD.",
+                    b"Owner sign-in is not configured. Set SALES_MIS_USERNAME and SALES_MIS_PASSWORD or configure SALES_MIS_MANAGERS.",
                     "text/plain; charset=utf-8",
                 )
             if self._has_valid_session():
@@ -1501,23 +1868,31 @@ button:hover{{filter:brightness(1.04)}}
             self.end_headers()
             return
         if path in {"/", "/stock", "/billing-efficiency"}:
-            if not username or not password:
+            try:
+                has_accounts = bool((username and password) or manager_accounts())
+            except RuntimeError as exc:
+                return self.send_bytes(503, str(exc).encode("utf-8"), "text/plain; charset=utf-8")
+            if not has_accounts:
                 return self.send_bytes(
                     503,
-                    b"Owner sign-in is not configured. Set SALES_MIS_USERNAME and SALES_MIS_PASSWORD.",
+                    b"Sign-in is not configured.",
                     "text/plain; charset=utf-8",
                 )
-            if not self._has_valid_session():
+            principal = self._current_principal()
+            if not principal:
                 return self._redirect("/login")
         if path == "/backup-download":
+            principal = self._current_principal()
+            if principal and principal["role"] != "owner":
+                return self.send_bytes(403, b"Only the owner can download a full backup.", "text/plain; charset=utf-8")
             username, password = self._credentials()
             if not username or not password:
                 return self.send_bytes(
                     503,
-                    b"Owner sign-in is not configured. Set SALES_MIS_USERNAME and SALES_MIS_PASSWORD.",
+                    b"Owner sign-in is not configured.",
                     "text/plain; charset=utf-8",
                 )
-            if not self._has_valid_session():
+            if not principal:
                 return self.send_bytes(401, b"Sign in is required to download a backup.", "text/plain; charset=utf-8")
             files = [
                 DATA_DIR / filename
@@ -1560,7 +1935,8 @@ button:hover{{filter:brightness(1.04)}}
             return self.send_bytes(200, file_path.read_bytes(), content_type + "; charset=utf-8")
         if path == "/stock":
             try:
-                payload = get_stock_report() or {"available": False}
+                allowed_states = principal["states"] if principal["role"] == "manager" else None
+                payload = get_stock_report(allowed_states) or {"available": False}
                 template = (TEMPLATE_DIR / "stock.html").read_text(encoding="utf-8")
                 encoded = json.dumps(payload, ensure_ascii=False, separators=(",", ":"), allow_nan=False).replace("</", "<\\/")
                 page = template.replace("__STOCK_DATA__", encoded)
@@ -1581,7 +1957,8 @@ button:hover{{filter:brightness(1.04)}}
                 return self.send_bytes(200, page.encode("utf-8"), "text/html; charset=utf-8")
         if path == "/billing-efficiency":
             try:
-                payload = get_billing_efficiency_report() or {"available": False}
+                allowed_states = principal["states"] if principal["role"] == "manager" else None
+                payload = get_billing_efficiency_report(allowed_states) or {"available": False}
                 template = (TEMPLATE_DIR / "billing_efficiency.html").read_text(encoding="utf-8")
                 encoded = json.dumps(
                     payload,
@@ -1603,10 +1980,15 @@ button:hover{{filter:brightness(1.04)}}
         if path != "/":
             return self.send_bytes(404, b"Not found", "text/plain; charset=utf-8")
         try:
+            allowed_states = principal["states"] if principal["role"] == "manager" else None
             if WORKBOOK_PATH.is_file():
-                payload = {**get_report(), "available": True, "weeklyPerformance": get_weekly_performance()}
+                payload = {
+                    **get_report(allowed_states),
+                    "available": True,
+                    "weeklyPerformance": get_weekly_performance(allowed_states),
+                }
                 try:
-                    last_year_report = get_last_year_report()
+                    last_year_report = get_last_year_report(allowed_states)
                     last_year_error = None
                 except (OSError, ValueError, KeyError, IndexError) as exc:
                     last_year_report = None
@@ -1622,7 +2004,7 @@ button:hover{{filter:brightness(1.04)}}
                 )
                 payload["lastYearError"] = last_year_error
                 try:
-                    stock_report = get_stock_report()
+                    stock_report = get_stock_report(allowed_states)
                     stock_state_error = None
                 except (OSError, ValueError, KeyError, IndexError) as exc:
                     stock_report = None
@@ -1643,6 +2025,7 @@ button:hover{{filter:brightness(1.04)}}
                         **POPULATION_REGION_MEMBERS[state],
                     }
                     for state, population in POPULATION_PROJECTIONS_2026.items()
+                    if state_is_allowed(state, allowed_states)
                 ]
                 payload["populationSource"] = POPULATION_SOURCE
                 payload["populationSourceUrl"] = POPULATION_SOURCE_URL
@@ -1666,10 +2049,14 @@ button:hover{{filter:brightness(1.04)}}
         request_path = urlparse(self.path).path
         if request_path == "/login":
             username, password = self._credentials()
-            if not username or not password:
+            try:
+                accounts = manager_accounts()
+            except RuntimeError as exc:
+                return self.send_bytes(503, str(exc).encode("utf-8"), "text/plain; charset=utf-8")
+            if not ((username and password) or accounts):
                 return self.send_bytes(
                     503,
-                    b"Owner sign-in is not configured. Set SALES_MIS_USERNAME and SALES_MIS_PASSWORD.",
+                    b"Sign-in is not configured.",
                     "text/plain; charset=utf-8",
                 )
             try:
@@ -1683,18 +2070,34 @@ button:hover{{filter:brightness(1.04)}}
                 submitted_password = form.get("password", [""])[0]
             except (UnicodeDecodeError, ValueError):
                 return self._send_login_page(400, "Enter your username and password.")
-            username_matches = hmac.compare_digest(
-                submitted_username.encode("utf-8"),
-                username.encode("utf-8"),
-            )
-            password_matches = hmac.compare_digest(
-                submitted_password.encode("utf-8"),
-                password.encode("utf-8"),
-            )
-            if not (username_matches and password_matches):
-                return self._send_login_page(401, "The username or password is incorrect.")
+            account_type = form.get("accountType", [""])[0]
+            if account_type not in {"", "owner", "manager"}:
+                return self._send_login_page(400, "Choose Owner or Manager sign in.")
+            owner_matches = bool(username and password) and hmac.compare_digest(
+                submitted_username.encode("utf-8"), username.encode("utf-8")
+            ) and hmac.compare_digest(
+                submitted_password.encode("utf-8"), password.encode("utf-8")
+            ) and account_type != "manager"
+            matching_manager = next((
+                account for account in accounts
+                if account_type != "owner"
+                and any(hmac.compare_digest(
+                    submitted_username.casefold().encode("utf-8"), candidate.casefold().encode("utf-8")
+                ) for candidate in (account["username"], account["loginId"]))
+                and manager_password_matches(account, submitted_password)
+            ), None)
+            if not owner_matches and not matching_manager:
+                return self._send_login_page(
+                    401,
+                    "The username or password is incorrect.",
+                    selected_role="manager" if account_type == "manager" else "owner",
+                    selected_login_id=submitted_username if account_type == "manager" else "",
+                    submitted_username=submitted_username if account_type == "manager" else "",
+                )
             expires = str(int(time.time()) + SESSION_TTL_SECONDS)
-            signature = self._session_signature(expires)
+            signature_username = username if owner_matches else matching_manager["username"]
+            signature_secret = password if owner_matches else manager_account_secret(matching_manager)
+            signature = self._session_signature(expires, signature_username, signature_secret)
             self.send_response(303)
             self.send_header("Location", "/")
             self.send_header(
@@ -1725,23 +2128,30 @@ button:hover{{filter:brightness(1.04)}}
             "/weekly-upload",
             "/last-year-upload",
             "/billing-efficiency-upload",
-            "/ai-chat",
         }
-        if request_path in owner_routes:
+        authenticated_routes = owner_routes | {"/ai-chat"}
+        if request_path in authenticated_routes:
             username, password = self._credentials()
-            if not username or not password:
+            try:
+                has_accounts = bool((username and password) or manager_accounts())
+            except RuntimeError as exc:
+                return self.send_bytes(503, str(exc).encode("utf-8"), "text/plain; charset=utf-8")
+            if not has_accounts:
                 return self.send_bytes(
                     503,
-                    b"Owner sign-in is not configured. Set SALES_MIS_USERNAME and SALES_MIS_PASSWORD.",
+                    b"Sign-in is not configured.",
                     "text/plain; charset=utf-8",
                 )
-        if request_path in owner_routes and not self._has_valid_session():
+        principal = self._current_principal()
+        if request_path in authenticated_routes and not principal:
             return self.send_bytes(
                 401,
                 b'{"ok":false,"error":"Sign in is required.","loginUrl":"/login"}',
                 "application/json; charset=utf-8",
             )
-        if request_path not in owner_routes:
+        if request_path in owner_routes and principal["role"] != "owner":
+            return self.send_bytes(403, b"Only the owner can make workbook or report changes.", "text/plain; charset=utf-8")
+        if request_path not in authenticated_routes:
             return self.send_bytes(404, b"Not found", "text/plain; charset=utf-8")
         if request_path == "/ai-chat":
             try:
@@ -1768,7 +2178,8 @@ button:hover{{filter:brightness(1.04)}}
                             raise ValueError("Selected dates must use YYYY-MM-DD format.")
                         if datetime.strptime(value, "%Y-%m-%d").strftime("%Y-%m-%d") != value:
                             raise ValueError("Selected dates must use YYYY-MM-DD format.")
-                context = build_analysis_context(scope, start_date, end_date)
+                allowed_states = principal["states"] if principal["role"] == "manager" else None
+                context = build_analysis_context(scope, start_date, end_date, allowed_states)
                 answer = build_local_analysis(question.strip(), context, language)
                 response = json.dumps({"ok": True, "answer": answer}).encode("utf-8")
                 return self.send_bytes(200, response, "application/json; charset=utf-8")

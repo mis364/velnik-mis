@@ -6,8 +6,8 @@ let detailSummaryPageNumber = 0;
 const DETAIL_PAGE_SIZE = 25;
 const DETAIL_SUMMARY_PAGE_SIZE = 25;
 const numberFormat = new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const amount = value => numberFormat.format(Number(value) || 0);
-const whole = value => new Intl.NumberFormat('en-IN').format(Number(value) || 0);
+const amount = value => value == null ? '—' : numberFormat.format(Number(value) || 0);
+const whole = value => value == null ? '—' : new Intl.NumberFormat('en-IN').format(Number(value) || 0);
 const safe = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
 
 function renderBars(elementId, rows, labelKey, valueKey, limit = Infinity) {
