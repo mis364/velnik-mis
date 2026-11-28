@@ -771,6 +771,15 @@ def find_plan_columns(frame):
 def build_report(workbook_source, source_name="latest.xlsx", loaded_at=None, manual_nepal_override=None, allowed_states=None):
     """Read source sheets and return a JSON-safe, month-to-date report."""
     book = pd.ExcelFile(workbook_source)
+    try:
+        return _build_report_from_book(
+            book, source_name, loaded_at, manual_nepal_override, allowed_states
+        )
+    finally:
+        book.close()
+
+
+def _build_report_from_book(book, source_name, loaded_at, manual_nepal_override, allowed_states):
     missing = REQUIRED_SHEETS - set(book.sheet_names)
     if missing:
         raise ValueError("Workbook is missing required sheet(s): " + ", ".join(sorted(missing)))
@@ -1062,6 +1071,13 @@ def build_report(workbook_source, source_name="latest.xlsx", loaded_at=None, man
 def build_stock_report(workbook_source, source_name="stock_latest.xlsx", loaded_at=None, allowed_states=None):
     """Read the stock workbook's product, state, distributor, and NPD summaries."""
     book = pd.ExcelFile(workbook_source)
+    try:
+        return _build_stock_report_from_book(book, source_name, loaded_at, allowed_states)
+    finally:
+        book.close()
+
+
+def _build_stock_report_from_book(book, source_name, loaded_at, allowed_states):
     missing = REQUIRED_STOCK_SHEETS - set(book.sheet_names)
     if missing:
         raise ValueError("Stock workbook is missing required sheet(s): " + ", ".join(sorted(missing)))
@@ -1281,7 +1297,6 @@ def build_stock_report(workbook_source, source_name="stock_latest.xlsx", loaded_
             "stateProductDetails": state_product_details,
             "distributors": distributors,
         })
-    book.close()
     return report
 
 
@@ -1592,6 +1607,7 @@ def validate_workbook_bytes(contents):
     except Exception as exc:
         raise ValueError("I could not read that Excel file. Please choose an .xlsx workbook.") from exc
     missing = REQUIRED_SHEETS - set(book.sheet_names)
+    book.close()
     if missing:
         raise ValueError("Workbook must include: " + ", ".join(sorted(REQUIRED_SHEETS)) + ". Missing: " + ", ".join(sorted(missing)))
     build_report(BytesIO(contents), "uploaded workbook", datetime.now().strftime("%Y-%m-%d %H:%M"))
@@ -1603,6 +1619,7 @@ def validate_stock_workbook_bytes(contents):
     except Exception as exc:
         raise ValueError("I could not read that Excel file. Please choose an .xlsx stock workbook.") from exc
     missing = REQUIRED_STOCK_SHEETS - set(book.sheet_names)
+    book.close()
     if missing:
         raise ValueError(
             "Stock workbook must include: " + ", ".join(sorted(REQUIRED_STOCK_SHEETS))
@@ -1616,7 +1633,9 @@ def validate_weekly_workbook_bytes(contents):
         book = pd.ExcelFile(BytesIO(contents))
     except Exception as exc:
         raise ValueError("I could not read that Excel file. Please choose an .xlsx weekly plan workbook.") from exc
-    if not book.sheet_names:
+    has_sheets = bool(book.sheet_names)
+    book.close()
+    if not has_sheets:
         raise ValueError("The weekly plan workbook has no worksheets.")
     build_weekly_performance(BytesIO(contents), "uploaded weekly plan", datetime.now().strftime("%Y-%m-%d %H:%M"))
 
