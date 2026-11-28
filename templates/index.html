@@ -235,11 +235,13 @@
         <div class="table-tools">
           <label class="search-label">Search distributor, code, or representative<input id="followSearch" type="search" placeholder="Type to search"></label>
           <label>State / region<select id="stateFilter"><option value="">All states / regions</option></select></label>
+          <label>ASM<select id="asmFilter"><option value="">All ASMs</option></select></label>
+          <label>ASE<select id="aseFilter"><option value="">All ASEs</option></select></label>
           <label>Representative<select id="repFilter"><option value="">All representatives</option></select></label>
           <button class="button" id="downloadCsv" type="button">Download CSV</button>
         </div>
         <div class="table-scroll">
-          <table><thead><tr><th>Distributor</th><th class="num">Billing without GST (lakh)</th><th>DB code</th><th>State / region</th><th>Sales representative</th><th>Area manager</th><th>Super stockist</th></tr></thead><tbody id="followRows"></tbody></table>
+          <table><thead><tr><th>Distributor</th><th class="num">Billing without GST (lakh)</th><th>DB code</th><th>State / region</th><th>ASE</th><th>ASM</th><th>Sales representative</th><th>Super stockist</th></tr></thead><tbody id="followRows"></tbody></table>
         </div>
         <div class="table-footer"><span id="pageSummary" aria-live="polite"></span><div class="pagination"><button class="button" id="prevPage" type="button">Previous</button><button class="button" id="nextPage" type="button">Next</button></div></div>
       </article>

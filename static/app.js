@@ -595,9 +595,12 @@ function renderNepalPanel() {
 function filteredDistributors() {
   const search = document.getElementById('followSearch').value.trim().toLowerCase();
   const state = document.getElementById('stateFilter').value;
+  const asm = document.getElementById('asmFilter').value;
+  const ase = document.getElementById('aseFilter').value;
   const rep = document.getElementById('repFilter').value;
-  return DATA.distributors.filter(row => (!state || row.state === state) && (!rep || row.salesRep === rep) &&
-    (!search || [row.name,row.code,row.state,row.salesRep,row.asm,row.superStockist].some(value => String(value).toLowerCase().includes(search))));
+  return DATA.distributors.filter(row => (!state || row.state === state) && (!asm || row.asm === asm) &&
+    (!ase || row.ase === ase) && (!rep || row.salesRep === rep) &&
+    (!search || [row.name,row.code,row.state,row.salesRep,row.ase,row.asm,row.superStockist].some(value => String(value).toLowerCase().includes(search))));
 }
 function renderDistributors() {
   const rows = filteredDistributors(), pageCount = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
@@ -605,7 +608,7 @@ function renderDistributors() {
   const begin = pageNumber * PAGE_SIZE, visible = rows.slice(begin, begin + PAGE_SIZE);
   document.getElementById('followCount').textContent = `${whole(DATA.distributors.length)} active distributors`;
   document.getElementById('pageSummary').textContent = rows.length ? `Showing ${whole(begin+1)}–${whole(Math.min(begin+PAGE_SIZE, rows.length))} of ${whole(rows.length)}` : 'No distributors match the filters.';
-  document.getElementById('followRows').innerHTML = visible.length ? visible.map(row => `<tr><td class="strong">${safe(row.name)}</td><td class="num">${row.billingWithoutGst == null ? '—' : money(row.billingWithoutGst)}</td><td class="code">${safe(row.code)}</td><td>${safe(row.state)}</td><td>${safe(row.salesRep || '—')}</td><td>${safe(row.asm || '—')}</td><td>${safe(row.superStockist || '—')}</td></tr>`).join('') : '<tr><td class="empty" colspan="7">No distributors match the filters.</td></tr>';
+  document.getElementById('followRows').innerHTML = visible.length ? visible.map(row => `<tr><td class="strong">${safe(row.name)}</td><td class="num">${row.billingWithoutGst == null ? '—' : money(row.billingWithoutGst)}</td><td class="code">${safe(row.code)}</td><td>${safe(row.state)}</td><td>${safe(row.ase || '—')}</td><td>${safe(row.asm || '—')}</td><td>${safe(row.salesRep || '—')}</td><td>${safe(row.superStockist || '—')}</td></tr>`).join('') : '<tr><td class="empty" colspan="8">No distributors match the filters.</td></tr>';
   document.getElementById('prevPage').disabled = pageNumber === 0;
   document.getElementById('nextPage').disabled = pageNumber >= pageCount - 1;
 }
@@ -614,6 +617,17 @@ function fillOptions(id, items, key, firstLabel) {
   const values = [...new Set(items.map(row => row[key]).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
   select.innerHTML = `<option value="">${safe(firstLabel)}</option>` + values.map(value => `<option value="${safe(value)}">${safe(value)}</option>`).join('');
   if (values.includes(previous)) select.value = previous;
+}
+function updateDistributorFilterOptions() {
+  const state = document.getElementById('stateFilter').value;
+  const stateRows = DATA.distributors.filter(row => !state || row.state === state);
+  fillOptions('asmFilter', stateRows, 'asm', 'All ASMs');
+  const asm = document.getElementById('asmFilter').value;
+  const asmRows = stateRows.filter(row => !asm || row.asm === asm);
+  fillOptions('aseFilter', asmRows, 'ase', 'All ASEs');
+  const ase = document.getElementById('aseFilter').value;
+  const aseRows = asmRows.filter(row => !ase || row.ase === ase);
+  fillOptions('repFilter', aseRows, 'salesRep', 'All representatives');
 }
 function render() {
   const days = selectDaily();
@@ -643,13 +657,19 @@ document.getElementById('applyDates').addEventListener('click', () => {
 });
 document.getElementById('downloadActionReport').addEventListener('click', downloadActionReport);
 fillOptions('stateFilter', DATA.distributors, 'state', 'All states / regions');
-fillOptions('repFilter', DATA.distributors, 'salesRep', 'All representatives');
-for (const id of ['followSearch','stateFilter','repFilter']) document.getElementById(id).addEventListener(id === 'followSearch' ? 'input' : 'change', () => { pageNumber = 0; renderDistributors(); });
+updateDistributorFilterOptions();
+document.getElementById('followSearch').addEventListener('input', () => { pageNumber = 0; renderDistributors(); });
+for (const id of ['stateFilter','asmFilter','aseFilter']) document.getElementById(id).addEventListener('change', () => {
+  updateDistributorFilterOptions();
+  pageNumber = 0;
+  renderDistributors();
+});
+document.getElementById('repFilter').addEventListener('change', () => { pageNumber = 0; renderDistributors(); });
 document.getElementById('prevPage').addEventListener('click', () => { pageNumber = Math.max(0,pageNumber-1); renderDistributors(); });
 document.getElementById('nextPage').addEventListener('click', () => { pageNumber++; renderDistributors(); });
 document.getElementById('downloadCsv').addEventListener('click', () => {
-  const rows = filteredDistributors(), header = ['Distributor','Billing without GST (lakh)','DB code','State / region','Sales representative','Area manager','Super stockist'];
-  const fields = ['name','billingWithoutGst','code','state','salesRep','asm','superStockist'];
+  const rows = filteredDistributors(), header = ['Distributor','Billing without GST (lakh)','DB code','State / region','ASE','ASM','Sales representative','Super stockist'];
+  const fields = ['name','billingWithoutGst','code','state','ase','asm','salesRep','superStockist'];
   const csv = SalesMISCsv.serialize([header, ...rows.map(row => fields.map(key => row[key] ?? ''))]);
   const link=document.createElement('a');link.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));link.download='active-distributor-billing.csv';link.click();URL.revokeObjectURL(link.href);
 });

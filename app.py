@@ -948,6 +948,7 @@ def build_report(workbook_source, source_name="latest.xlsx", loaded_at=None, man
             "name": clean_text(row.get("DB Name")),
             "state": clean_text(row.get("State"), "Unclassified"),
             "salesRep": clean_text(row.get("Res SR/SO Name")),
+            "ase": clean_text(row.get("Res ASE Name")),
             "asm": clean_text(row.get("Res ASM Name")),
             "superStockist": clean_text(row.get("SS Name")),
             "billingWithoutGst": net_billing,
