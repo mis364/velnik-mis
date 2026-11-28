@@ -927,7 +927,38 @@ def build_report(workbook_source, source_name="latest.xlsx", loaded_at=None, man
         db = db[db["State"].map(lambda value: state_is_allowed(value, allowed_states))].copy()
     status = db["DB Status"].fillna("").astype(str).str.strip().str.upper()
     zero_flag = db["Zero Billing"].fillna("").astype(str).str.strip().str.lower().eq("zero billing db")
+    active_rows = db[status == "ACTIVE"]
     active_zero = db[(status == "ACTIVE") & zero_flag]
+
+    def find_db_column(*names):
+        normalized = {
+            re.sub(r"\s+", " ", str(column)).strip().casefold(): column
+            for column in db.columns
+        }
+        return next((normalized[name.casefold()] for name in names if name.casefold() in normalized), None)
+
+    net_billing_col = find_db_column(
+        "Value In Lacs without Tax", "Value In Lacs without GST", "Without GST", "Value In Lacs"
+    )
+    gross_billing_col = find_db_column(
+        "Value In Lacs with Tax", "Value In Lacs with GST", "With Tax"
+    )
+    distributors = []
+    for _, row in active_rows.iterrows():
+        net_billing = number(row.get(net_billing_col)) if net_billing_col else None
+        gross_billing = number(row.get(gross_billing_col)) if gross_billing_col else None
+        distributors.append({
+            "code": clean_text(row.get("DB Code")),
+            "name": clean_text(row.get("DB Name")),
+            "state": clean_text(row.get("State"), "Unclassified"),
+            "salesRep": clean_text(row.get("Res SR/SO Name")),
+            "asm": clean_text(row.get("Res ASM Name")),
+            "superStockist": clean_text(row.get("SS Name")),
+            "billingWithoutGst": net_billing,
+            "gstAmount": gross_billing - net_billing if gross_billing is not None and net_billing is not None else None,
+        })
+    distributors.sort(key=lambda item: (item["state"], item["name"]))
+
     followups = []
     for _, row in active_zero.iterrows():
         followups.append({
@@ -1012,6 +1043,7 @@ def build_report(workbook_source, source_name="latest.xlsx", loaded_at=None, man
         "statePlan": state_plan,
         "reconciliation": reconciliation,
         "followups": followups,
+        "distributors": distributors,
         "zeroByState": zero_by_state,
         "productMix": product_mix,
         "nepalManual": nepal_manual,

@@ -44,7 +44,7 @@
         <a class="report-shortcut" href="#snapshot"><span class="shortcut-number">02</span><strong>Sales snapshot</strong><small>Daily movement and date range</small></a>
         <a class="report-shortcut" href="#period-comparison"><span class="shortcut-number">03</span><strong>Period comparison</strong><small>Current vs previous range</small></a>
         <a class="report-shortcut" href="#state-billing"><span class="shortcut-number">04</span><strong>State billing</strong><small>Territory sales and rankings</small></a>
-        <details class="more-sections"><summary>More sections <span class="muted">Weekly · products · follow-up · tools</span></summary><div class="more-section-links"><a href="#year-comparison">Year-over-year</a><a href="#weekly">Weekly performance</a><a href="#nepal">Nepal sales</a><a href="#improve">Action points and data checks</a><a href="#products">Product mix</a><a href="#distributors">Zero-billing distributors</a><a href="#ai-analysis">Local analysis</a><a href="#recurring">Workbook upload</a><a href="#report-guide">How to read this report</a></div></details>
+        <details class="more-sections"><summary>More sections <span class="muted">Weekly · products · follow-up · tools</span></summary><div class="more-section-links"><a href="#year-comparison">Year-over-year</a><a href="#weekly">Weekly performance</a><a href="#nepal">Nepal sales</a><a href="#improve">Action points and data checks</a><a href="#products">Product mix</a><a href="#distributors">Distributor billing</a><a href="#ai-analysis">Local analysis</a><a href="#recurring">Workbook upload</a><a href="#report-guide">How to read this report</a></div></details>
       </div>
     </section>
 
@@ -58,7 +58,7 @@
           <article><h3>Weekly performance</h3><p>Weekly plan, achievement, and balance come from the separate weekly plan workbook. They are not recalculated from the selected daily date range.</p></article>
           <article><h3>Nepal sales</h3><p>Manually maintained summary figures are shown separately from dated transactions. The report checks whether those figures are already included before adding them to totals.</p></article>
           <article><h3>Action points and product mix</h3><p>Action points flag patterns to review; they do not explain the cause. Product mix ranks sales by product for the selected date range.</p></article>
-          <article><h3>Zero-billing distributors</h3><p>This list follows the workbook's Zero Billing DB flag. Confirm distributor status and the latest billing with the representative before follow-up.</p></article>
+          <article><h3>Distributor billing</h3><p>This list includes active DBs from “SS to DB Sale.” Billing without GST and GST amount come from the workbook's without-tax and with-tax values; GST is their difference.</p></article>
         </div>
       </details>
     </section>
@@ -230,7 +230,7 @@
     </section>
 
     <section class="section" id="distributors">
-      <div class="section-heading"><div><p class="kicker">04 · FOLLOW UP</p><h2>Active distributors with zero billing</h2><p class="muted">From the workbook’s “Zero Billing DB” flag. Confirm with the representative before acting.</p></div><span class="status-pill" id="followCount">—</span></div>
+      <div class="section-heading"><div><p class="kicker">04 · FOLLOW UP</p><h2>Active distributor billing</h2><p class="muted">All active DBs from “SS to DB Sale,” with billing without GST and GST amount shown in lakh.</p></div><span class="status-pill" id="followCount">—</span></div>
       <article class="panel table-panel">
         <div class="table-tools">
           <label class="search-label">Search distributor, code, or representative<input id="followSearch" type="search" placeholder="Type to search"></label>
@@ -239,7 +239,7 @@
           <button class="button" id="downloadCsv" type="button">Download CSV</button>
         </div>
         <div class="table-scroll">
-          <table><thead><tr><th>Distributor</th><th>DB code</th><th>State / region</th><th>Sales representative</th><th>Area manager</th><th>Super stockist</th></tr></thead><tbody id="followRows"></tbody></table>
+          <table><thead><tr><th>Distributor</th><th class="num">Billing without GST (lakh)</th><th class="num">GST amount (lakh)</th><th>DB code</th><th>State / region</th><th>Sales representative</th><th>Area manager</th><th>Super stockist</th></tr></thead><tbody id="followRows"></tbody></table>
         </div>
         <div class="table-footer"><span id="pageSummary" aria-live="polite"></span><div class="pagination"><button class="button" id="prevPage" type="button">Previous</button><button class="button" id="nextPage" type="button">Next</button></div></div>
       </article>

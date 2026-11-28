@@ -596,16 +596,16 @@ function filteredDistributors() {
   const search = document.getElementById('followSearch').value.trim().toLowerCase();
   const state = document.getElementById('stateFilter').value;
   const rep = document.getElementById('repFilter').value;
-  return DATA.followups.filter(row => (!state || row.state === state) && (!rep || row.salesRep === rep) &&
+  return DATA.distributors.filter(row => (!state || row.state === state) && (!rep || row.salesRep === rep) &&
     (!search || [row.name,row.code,row.state,row.salesRep,row.asm,row.superStockist].some(value => String(value).toLowerCase().includes(search))));
 }
 function renderDistributors() {
   const rows = filteredDistributors(), pageCount = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
   pageNumber = Math.min(pageNumber, pageCount - 1);
   const begin = pageNumber * PAGE_SIZE, visible = rows.slice(begin, begin + PAGE_SIZE);
-  document.getElementById('followCount').textContent = `${whole(DATA.followups.length)} flagged for follow-up`;
+  document.getElementById('followCount').textContent = `${whole(DATA.distributors.length)} active distributors`;
   document.getElementById('pageSummary').textContent = rows.length ? `Showing ${whole(begin+1)}–${whole(Math.min(begin+PAGE_SIZE, rows.length))} of ${whole(rows.length)}` : 'No distributors match the filters.';
-  document.getElementById('followRows').innerHTML = visible.length ? visible.map(row => `<tr><td class="strong">${safe(row.name)}</td><td class="code">${safe(row.code)}</td><td>${safe(row.state)}</td><td>${safe(row.salesRep || '—')}</td><td>${safe(row.asm || '—')}</td><td>${safe(row.superStockist || '—')}</td></tr>`).join('') : '<tr><td class="empty" colspan="6">No distributors match the filters.</td></tr>';
+  document.getElementById('followRows').innerHTML = visible.length ? visible.map(row => `<tr><td class="strong">${safe(row.name)}</td><td class="num">${row.billingWithoutGst == null ? '—' : money(row.billingWithoutGst)}</td><td class="num">${row.gstAmount == null ? '—' : money(row.gstAmount)}</td><td class="code">${safe(row.code)}</td><td>${safe(row.state)}</td><td>${safe(row.salesRep || '—')}</td><td>${safe(row.asm || '—')}</td><td>${safe(row.superStockist || '—')}</td></tr>`).join('') : '<tr><td class="empty" colspan="8">No distributors match the filters.</td></tr>';
   document.getElementById('prevPage').disabled = pageNumber === 0;
   document.getElementById('nextPage').disabled = pageNumber >= pageCount - 1;
 }
@@ -642,16 +642,16 @@ document.getElementById('applyDates').addEventListener('click', () => {
   render();
 });
 document.getElementById('downloadActionReport').addEventListener('click', downloadActionReport);
-fillOptions('stateFilter', DATA.followups, 'state', 'All states / regions');
-fillOptions('repFilter', DATA.followups, 'salesRep', 'All representatives');
+fillOptions('stateFilter', DATA.distributors, 'state', 'All states / regions');
+fillOptions('repFilter', DATA.distributors, 'salesRep', 'All representatives');
 for (const id of ['followSearch','stateFilter','repFilter']) document.getElementById(id).addEventListener(id === 'followSearch' ? 'input' : 'change', () => { pageNumber = 0; renderDistributors(); });
 document.getElementById('prevPage').addEventListener('click', () => { pageNumber = Math.max(0,pageNumber-1); renderDistributors(); });
 document.getElementById('nextPage').addEventListener('click', () => { pageNumber++; renderDistributors(); });
 document.getElementById('downloadCsv').addEventListener('click', () => {
-  const rows = filteredDistributors(), header = ['Distributor','DB code','State / region','Sales representative','Area manager','Super stockist'];
-  const fields = ['name','code','state','salesRep','asm','superStockist'];
-  const csv = SalesMISCsv.serialize([header, ...rows.map(row => fields.map(key => row[key] || ''))]);
-  const link=document.createElement('a');link.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));link.download='active-zero-billing-follow-up.csv';link.click();URL.revokeObjectURL(link.href);
+  const rows = filteredDistributors(), header = ['Distributor','Billing without GST (lakh)','GST amount (lakh)','DB code','State / region','Sales representative','Area manager','Super stockist'];
+  const fields = ['name','billingWithoutGst','gstAmount','code','state','salesRep','asm','superStockist'];
+  const csv = SalesMISCsv.serialize([header, ...rows.map(row => fields.map(key => row[key] ?? ''))]);
+  const link=document.createElement('a');link.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));link.download='active-distributor-billing.csv';link.click();URL.revokeObjectURL(link.href);
 });
 const workbookFile = document.getElementById('workbookFile');
 if (workbookFile) workbookFile.addEventListener('change', async event => {
