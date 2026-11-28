@@ -605,7 +605,7 @@ function renderDistributors() {
   const begin = pageNumber * PAGE_SIZE, visible = rows.slice(begin, begin + PAGE_SIZE);
   document.getElementById('followCount').textContent = `${whole(DATA.distributors.length)} active distributors`;
   document.getElementById('pageSummary').textContent = rows.length ? `Showing ${whole(begin+1)}–${whole(Math.min(begin+PAGE_SIZE, rows.length))} of ${whole(rows.length)}` : 'No distributors match the filters.';
-  document.getElementById('followRows').innerHTML = visible.length ? visible.map(row => `<tr><td class="strong">${safe(row.name)}</td><td class="num">${row.billingWithoutGst == null ? '—' : money(row.billingWithoutGst)}</td><td class="num">${row.gstAmount == null ? '—' : money(row.gstAmount)}</td><td class="code">${safe(row.code)}</td><td>${safe(row.state)}</td><td>${safe(row.salesRep || '—')}</td><td>${safe(row.asm || '—')}</td><td>${safe(row.superStockist || '—')}</td></tr>`).join('') : '<tr><td class="empty" colspan="8">No distributors match the filters.</td></tr>';
+  document.getElementById('followRows').innerHTML = visible.length ? visible.map(row => `<tr><td class="strong">${safe(row.name)}</td><td class="num">${row.billingWithoutGst == null ? '—' : money(row.billingWithoutGst)}</td><td class="code">${safe(row.code)}</td><td>${safe(row.state)}</td><td>${safe(row.salesRep || '—')}</td><td>${safe(row.asm || '—')}</td><td>${safe(row.superStockist || '—')}</td></tr>`).join('') : '<tr><td class="empty" colspan="7">No distributors match the filters.</td></tr>';
   document.getElementById('prevPage').disabled = pageNumber === 0;
   document.getElementById('nextPage').disabled = pageNumber >= pageCount - 1;
 }
@@ -648,8 +648,8 @@ for (const id of ['followSearch','stateFilter','repFilter']) document.getElement
 document.getElementById('prevPage').addEventListener('click', () => { pageNumber = Math.max(0,pageNumber-1); renderDistributors(); });
 document.getElementById('nextPage').addEventListener('click', () => { pageNumber++; renderDistributors(); });
 document.getElementById('downloadCsv').addEventListener('click', () => {
-  const rows = filteredDistributors(), header = ['Distributor','Billing without GST (lakh)','GST amount (lakh)','DB code','State / region','Sales representative','Area manager','Super stockist'];
-  const fields = ['name','billingWithoutGst','gstAmount','code','state','salesRep','asm','superStockist'];
+  const rows = filteredDistributors(), header = ['Distributor','Billing without GST (lakh)','DB code','State / region','Sales representative','Area manager','Super stockist'];
+  const fields = ['name','billingWithoutGst','code','state','salesRep','asm','superStockist'];
   const csv = SalesMISCsv.serialize([header, ...rows.map(row => fields.map(key => row[key] ?? ''))]);
   const link=document.createElement('a');link.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));link.download='active-distributor-billing.csv';link.click();URL.revokeObjectURL(link.href);
 });

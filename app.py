@@ -940,13 +940,9 @@ def build_report(workbook_source, source_name="latest.xlsx", loaded_at=None, man
     net_billing_col = find_db_column(
         "Value In Lacs without Tax", "Value In Lacs without GST", "Without GST", "Value In Lacs"
     )
-    gross_billing_col = find_db_column(
-        "Value In Lacs with Tax", "Value In Lacs with GST", "With Tax"
-    )
     distributors = []
     for _, row in active_rows.iterrows():
         net_billing = number(row.get(net_billing_col)) if net_billing_col else None
-        gross_billing = number(row.get(gross_billing_col)) if gross_billing_col else None
         distributors.append({
             "code": clean_text(row.get("DB Code")),
             "name": clean_text(row.get("DB Name")),
@@ -955,7 +951,6 @@ def build_report(workbook_source, source_name="latest.xlsx", loaded_at=None, man
             "asm": clean_text(row.get("Res ASM Name")),
             "superStockist": clean_text(row.get("SS Name")),
             "billingWithoutGst": net_billing,
-            "gstAmount": gross_billing - net_billing if gross_billing is not None and net_billing is not None else None,
         })
     distributors.sort(key=lambda item: (item["state"], item["name"]))
 
